@@ -1,8 +1,12 @@
 const puppeteer = require("puppeteer");
 const fs = require("fs");
 
+async function write(path, data) {
+  fs.writeFileSync(path, JSON.stringify(data, null, 2));
+}
+
 async function writeTemp(data) {
-  fs.writeFileSync("./temp.json", JSON.stringify(data, null, 2))
+  write("./temp/json", data);
 }
 
 async function scrapeCPUs () {
@@ -25,9 +29,7 @@ async function scrapeCPUs () {
     const page = await browser.newPage();
     while (true) {
       const url = cpus.shift();
-      if (!url) {
-        break;
-      }
+      if (!url) break;
       try {
         await page.goto(url);
         await page.waitForSelector("li[style*=\"border: solid red\"]");
@@ -36,18 +38,6 @@ async function scrapeCPUs () {
         });
         await page.goto(detailsURL);
         await page.waitForSelector(".cpuname");
-        /*
-        const detailsMap = {
-          Class: "class",
-          Socket: "socket",
-          Clockspeed: "base_clock",
-          "Turbo Speed": "turbo_clock",
-          Cores: "cores",
-          "Typical TDP": "tdp",
-          "CPU FirstSeen on Charts": "release",
-          "Overall Rank": "passmark_rank"
-        }
-        */
         const details = {
           name: await page.evaluate(() => document.querySelector(".cpuname")?.textContent),
           stats: await page.evaluate(() => {
@@ -60,9 +50,7 @@ async function scrapeCPUs () {
           }))
         }
         data.push(details);
-        if (true) {
-          fs.writeFileSync("./data/cpu.json", JSON.stringify(data));
-        }
+        write("./data/cpu.json", data);
         console.log(data.length);
       } catch {
         // just retry anything which errors
@@ -85,7 +73,7 @@ async function cleanCPUs() {
     const updatedBenchmarks = {};
     for (const key in cpu) {
       if (key != "name" && key != "stats") {
-        const newKey = key.toLowerCase().replaceAll(" ", "_");
+        const newKey = "test_suite_" + key.toLowerCase().replaceAll(" ", "_");
         const value = parseFloat(cpu[key].match(/[\d\.,]+/)[0].replaceAll(",", ""));
         delete cpu[key];
         updatedBenchmarks[newKey] = value;
@@ -101,14 +89,14 @@ async function cleanCPUs() {
       "Turbo Speed": ["turbo_clock"],
       "Cores": ["cores"],
       "Typical TDP": ["tdp"],
-      "CPU First Seen on Charts:\\s+(Q.{6})": "release",
-      "Overall Rank": ["overall_rank"],
+      "CPU First Seen on Charts:\\s+(Q.{6})": "release_quarter",
+      "Overall Rank": ["cpu_mark_overall_rank"],
       "\\t(\\d+)": ["cpu_mark_rating"],
-      "Single Thread Rating": ["single_thread_rating"],
-      "Cross-Platform Rating": ["cross_platform_rating"],
-      "Samples": ["samples"],
+      "Single Thread Rating": ["cpu_mark_single_thread_rating"],
+      "Cross-Platform Rating": ["cpu_mark_cross_platform_rating"],
+      "Samples": ["cpu_mark_samples"],
       "CPU Mark": ["old_cpu_mark_rating"],
-      "Thread": ["old_single_thread_rating"]
+      "Thread": ["old_cpu_mark_single_thread_rating"]
     }
     for (const stat in statsMap) {
       for (const string of cpu.stats) {
@@ -121,10 +109,22 @@ async function cleanCPUs() {
         }
       }
     }
+    if (cpu.release_quarter) {
+      const [quarter, year] = cpu.release_quarter.split(" ");
+      cpu.release_quarter = (parseInt(year) - 2008) * 4 + parseInt(quarter[1]);
+    }
+    cpu.name = cpu.name.replace(/ @.+Hz/, "");
     delete cpu["stats"];
     Object.assign(cpu, updatedBenchmarks);
   }
-  fs.writeFileSync("./data/cpu_cleaned.json", JSON.stringify(cpus, null, 2))
+  write("./data/cpu_cleaned.json", cpus);
 }
 
-cleanCPUs();
+async function filterCPUs() {
+  let cpus = require("./data/cpu_cleaned.json");
+  write("./data/cpu_filtered.json", cpus.filter(cpu => {
+    return ["Desktop", "Laptop"].includes(cpu.class);
+  }));
+}
+//cleanCPUs();
+filterCPUs();

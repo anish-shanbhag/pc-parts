@@ -1,6 +1,5 @@
 const puppeteer = require("puppeteer");
 const fs = require("fs");
-const unique = [];
 
 (async () => {
   const browser = await puppeteer.launch({
@@ -17,7 +16,7 @@ const unique = [];
     return [...document.querySelectorAll(".odd a, .even a")].map(link => link.href);
   });
   await listPage.close();
-  const data = require("./data/cpu.json");
+  const data = [];
   async function getCPULink() {
     const page = await browser.newPage();
     while (true) {
@@ -33,7 +32,6 @@ const unique = [];
         });
         await page.goto(detailsURL);
         await page.waitForSelector(".cpuname");
-        // const getText = selector => page.evaluate(selector => document.querySelector(selector)?.textContent, selector);
         /*
         const detailsMap = {
           Class: "class",
@@ -51,14 +49,6 @@ const unique = [];
           stats: await page.evaluate(() => {
             return document.querySelector(".desc").textContent.split("\n").filter(a => /\d/.test(a))
           }),
-          /*
-          ...(await page.evaluate(detailsMap => {
-            return Object.fromEntries([...document.querySelectorAll(".desc p")].map(p => {
-              const [key, value] = p.textContent.split(":");
-              return [detailsMap[key], value?.trim()];
-            }).filter(([key]) => key))
-          }, detailsMap))
-          */
           ...(await page.evaluate(() => {
             return Object.fromEntries([...document.querySelectorAll("#test-suite-results tr")].map(tr => {
               return [tr.querySelector("th").textContent, tr.querySelector("td").textContent];
@@ -71,8 +61,9 @@ const unique = [];
         }
         console.log(data.length);
       } catch {
-        // just skip anything which errors
+        // just retry anything which errors
         console.log(url);
+        cpus.push(url);
       }
       
     }

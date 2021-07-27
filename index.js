@@ -176,6 +176,7 @@ async function scrapeUserBenchmark() {
         });
       }
       return stats;
+      // test comment
     });
     if (stats.market_share) {
       const url = await page.evaluate(() => window.location.href);

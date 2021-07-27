@@ -140,7 +140,7 @@ async function scrapeUserBenchmark() {
     "about:blank"
   );
   let i = 0;
-  for (const cpu of cpus.slice(1685)) {
+  for (const cpu of cpus.slice(200)) {
     await page.goto("https://cpu.userbenchmark.com/Search?searchTerm=" + cpu.name);
     await page.waitForSelector(".stealthlink, #searchForm");
     if (await page.$("#searchForm")) {
@@ -177,13 +177,14 @@ async function scrapeUserBenchmark() {
       }
       return stats;
     });
-    if (stats.market_share && Object.keys(stats.market_share)[0] !== "Jan 20") {
-      console.log(cpu.name, Object.keys(stats.market_share)[0]);
+    if (stats.market_share) {
+      const url = await page.evaluate(() => window.location.href);
+      await page.goto("https://web.archive.org/web/2020*/" + url);
     }
     Object.assign(cpu, stats);
     write("./data/cpu_userbenchmark.json", cpus);
     console.log(i++);
-    //await new Promise(resolve => setTimeout(resolve, 1000));
+    //await new Promise(resolve => setTimeout(resolve, 100000));
   }
   write("./data/cpu_userbenchmark.json", cpus);
 }

@@ -9,14 +9,21 @@ async function writeTemp(data) {
   write("./temp/json", data);
 }
 
-async function scrapeCPUs () {
+async function startScraping(url) {
   const browser = await puppeteer.launch({
     headless: false,
     args: [`--window-size=1680,820`],
     defaultViewport: null
   });
-  const listPage = await browser.newPage();
-  await listPage.goto("https://www.cpubenchmark.net/CPU_mega_page.html");
+  const page = await browser.newPage();
+  await page.goto(url);
+  return [browser, page];
+}
+
+async function scrapeCPUMark() {
+  const [browser, listPage] = await startScraping(
+    "https://www.cpubenchmark.net/CPU_mega_page.html"
+  );
   await listPage.waitForSelector(".input-sm");
   await listPage.select(".input-sm", "-1");
   await listPage.waitForSelector(".odd a");
@@ -57,7 +64,7 @@ async function scrapeCPUs () {
         console.log(url);
         cpus.push(url);
       }
-      
+
     }
     await page.close();
   }
@@ -126,5 +133,59 @@ async function filterCPUs() {
     return ["Desktop", "Laptop"].includes(cpu.class);
   }));
 }
-//cleanCPUs();
-filterCPUs();
+
+async function scrapeUserBenchmark() {
+  const cpus = require("./data/cpu_filtered.json");
+  const [browser, page] = await startScraping(
+    "about:blank"
+  );
+  let i = 0;
+  for (const cpu of cpus.slice(1685)) {
+    await page.goto("https://cpu.userbenchmark.com/Search?searchTerm=" + cpu.name);
+    await page.waitForSelector(".stealthlink, #searchForm");
+    if (await page.$("#searchForm")) {
+      const link = await page.$(".tl-tag");
+      if (link) {
+        await page.goto(await page.$eval(".tl-tag", a => a.href));
+        await page.waitForSelector(".stealthlink");
+      } else {
+        console.log("Skipped " + cpu.name);
+        continue;
+      }
+    }
+    const stats = await page.evaluate(() => {
+      const stats = {};
+      const efpsElement = document.querySelector(".productgrid-cap.semi-strong");
+      if (efpsElement) {
+        stats.userbenchmark_efps = parseInt(efpsElement.textContent.split(" ")[1]);
+      }
+      const conclusion = document.querySelector(".conclusion").textContent.split(" ");
+      stats.userbenchmark_score = parseFloat(conclusion[3].slice(0, -1));
+      stats.userbenchmark_rank = parseInt(conclusion[4].slice(1, -2));
+      const samplesText = document.querySelector(".lighterblacktext.medp").textContent;
+      stats.userbenchmark_samples = parseInt(samplesText.split(" ")[2].replaceAll(",", ""));
+      const benchmarkNames = ["memory_latency", "1_core", "2_core", "4_core", "8_core", "64_core"];
+      [...document.querySelectorAll(".mcs-hl-col")].forEach(td => {
+        const value = parseFloat(td.textContent.split(" ")[1].replaceAll(",", ""));
+        stats["userbenchmark_" + benchmarkNames.shift()] = value;
+      });
+      if (window.data) {
+        stats.market_share = {};
+        window.data.labels.forEach((label, i) => {
+          stats.market_share[label] = window.data.datasets[0].data[i];
+        });
+      }
+      return stats;
+    });
+    if (stats.market_share && Object.keys(stats.market_share)[0] !== "Jan 20") {
+      console.log(cpu.name, Object.keys(stats.market_share)[0]);
+    }
+    Object.assign(cpu, stats);
+    write("./data/cpu_userbenchmark.json", cpus);
+    console.log(i++);
+    //await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  write("./data/cpu_userbenchmark.json", cpus);
+}
+
+scrapeUserBenchmark();

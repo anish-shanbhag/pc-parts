@@ -11,7 +11,7 @@ async function writeTemp(data) {
 
 async function startScraping(url) {
   const browser = await puppeteer.launch({
-    headless: true,
+    headless: false,
     args: [`--window-size=1000,700`],
     defaultViewport: null
   });
@@ -95,6 +95,7 @@ async function cleanCPUs() {
       "Clockspeed": ["base_clock"],
       "Turbo Speed": ["turbo_clock"],
       "Cores": ["cores"],
+      "Threads": ["threads"],
       "Typical TDP": ["tdp"],
       "CPU First Seen on Charts:\\s+(Q.{6})": "release_quarter",
       "Overall Rank": ["cpu_mark_overall_rank"],
@@ -116,6 +117,7 @@ async function cleanCPUs() {
         }
       }
     }
+    if (cpu.name === "AMD Ryzen 5 3500C") cpu.release_quarter = "Q4 2020";
     if (cpu.release_quarter) {
       const [quarter, year] = cpu.release_quarter.split(" ");
       cpu.release_quarter = (parseInt(year) - 2007) * 4 + parseInt(quarter[1]);
@@ -136,7 +138,7 @@ async function filterCPUs() {
 
 async function scrapeUserBenchmark() {
   const cpus = require("./data/cpu_userbenchmark.json");
-  const remaining = cpus.filter(cpu => !cpu.market_share && !cpu.userbenchmark_score);
+  const remaining = cpus.filter(cpu => !cpu.market_share && cpu.userbenchmark_score === undefined);
   const [browser] = await startScraping(
     "about:blank"
   );
@@ -223,13 +225,17 @@ async function scrapeUserBenchmark() {
             const start = Date.now();
             intercept = true;
             page.goto(archiveUrl).catch(() => { });
-            await page.waitForFunction(() => window.data, { polling: 500, timeout: 60000 });
-            stats.market_share = await page.evaluate(async (stats, archiveUrl) => {
-              window.data.labels.forEach((label, i) => {
-                stats.market_share[label] = window.data.datasets[0].data[i];
-              });
+            await page.waitForFunction(() => {
+              return window.data || document.querySelector(".supermutedtext, .btn-success") || location.href.includes("ipblacklisted");
+            }, { polling: 500, timeout: 60000 });
+            stats.market_share = await page.evaluate(async stats => {
+              if (window.data) {
+                window.data.labels.forEach((label, i) => {
+                  stats.market_share[label] = window.data.datasets[0].data[i];
+                });
+              }
               return stats.market_share;
-            }, stats, archiveUrl);
+            }, stats);
             console.log(`Done with ${year} for ${cpu.name} in ${Date.now() - start} ms`);
           }
         }
@@ -247,11 +253,24 @@ async function scrapeUserBenchmark() {
       scrape();
     }
   }
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 1; i++) {
     scrape();
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
   write("./data/cpu_userbenchmark.json", cpus);
 }
 
-scrapeUserBenchmark();
+const filtered = require("./data/cpu_filtered.json");
+const cpus = require("./data/cpu_userbenchmark.json");
+for (const cpu of cpus) {
+  const a = filtered.find(b => b.name === cpu.name);
+  if (a.threads) {
+    cpu.threads = a.threads;
+  }
+  if (a.release_quarter) {
+    cpu.release_quarter = a.release_quarter;
+  } else {
+    console.log(a.name);
+  }
+}
+write("./data/cpu_userbenchmark.json", cpus);

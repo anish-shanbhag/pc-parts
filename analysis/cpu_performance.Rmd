@@ -1,13 +1,13 @@
 ---
 title: "CPU Performance Analysis"
-output: html_notebook
+output: "github_document"
 ---
 
 ## Set-Up
 
 First, the necessary packages are loaded in.
 ```{r}
-pacman::p_load(pacman, rio, rmarkdown, dplyr)
+pacman::p_load(pacman, rio, dplyr, ggplot2)
 ```
 
 Next, we import our data into a dataframe.
@@ -24,6 +24,42 @@ It's clear that there is a lot of data, much of it being extraneous. Since I wan
 ```{r}
 df <- df[, c("name", "cpu_mark_rating", "cpu_mark_single_thread_rating", "release_quarter")]
 cpu_perf <- na.omit(df)
+
+# CHEAP FIX, REMOVE IN FINAL
+cpu_perf$cpu_mark_single_thread_rating[cpu_perf$cpu_mark_single_thread_rating > 4000] <- cpu_perf$cpu_mark_single_thread_rating %/% 10
+
+# PART 2 LMAO
+cpu_perf$cpu_mark_single_thread_rating[cpu_perf$release_quarter < 30 & cpu_perf$cpu_mark_single_thread_rating > 2500] <- cpu_perf$cpu_mark_single_thread_rating %/% 10
+
 head(cpu_perf)
 ```
+
+The *cpu_mark_rating* and *cpu_mark_single_thread_rating* columns refer to the overall and single thread scores, respectively, determined by the PassMark benchmark software for each CPU. The *release_quarter* column refers to an integer computed by taking the difference between the year of release and 2007, multiplying by four, and adding the year's quarter as an indication of time.
+
+I want to examine how overall and single thread performance has changed over time. One way of displaying these improvements is plotting maximum scores for the CPUs in each release quarter. Plotting mean or median scores wouldn't make much sense since most CPUs are created for average consumers.
+
+In order to do this, I need to create a new dataframe that takes `cpu_perf`, groups by release quarter, and finds both maximum scores.
+```{r}
+result <- aggregate(cbind(cpu_mark_rating, cpu_mark_single_thread_rating) ~ release_quarter, data = cpu_perf, max)
+
+head(result)
+```
+
+## Plotting
+
+Let's first look at overall performance.
+```{r}
+ggplot(result, aes(x = release_quarter, y = cpu_mark_rating)) + geom_point(color = "blue")
+```
+
+There appears to be a strong, positive exponential relationship.
+
+Next, let's look at single thread performance.
+```{r}
+ggplot(result, aes(x = release_quarter, y = cpu_mark_single_thread_rating)) + geom_point(color = "red")
+```
+
+There does seem to be a positive association, though it is unclear if it is linear or nonlinear.
+
+## Regression Analysis
 

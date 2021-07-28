@@ -259,18 +259,3 @@ async function scrapeUserBenchmark() {
   }
   write("./data/cpu_userbenchmark.json", cpus);
 }
-
-const filtered = require("./data/cpu_filtered.json");
-const cpus = require("./data/cpu_userbenchmark.json");
-for (const cpu of cpus) {
-  const a = filtered.find(b => b.name === cpu.name);
-  if (a.threads) {
-    cpu.threads = a.threads;
-  }
-  if (a.release_quarter) {
-    cpu.release_quarter = a.release_quarter;
-  } else {
-    console.log(a.name);
-  }
-}
-write("./data/cpu_userbenchmark.json", cpus);

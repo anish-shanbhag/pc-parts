@@ -9,6 +9,32 @@ async function writeTemp(data) {
   write("./temp/json", data);
 }
 
+function moveObjectElement(currentKey, afterKey, obj) {
+  var result = {};
+  var val = obj[currentKey];
+  delete obj[currentKey];
+  var next = -1;
+  var i = 0;
+  if (typeof afterKey == 'undefined' || afterKey == null) afterKey = '';
+  Object.entries(obj).forEach(([k, v]) => {
+    if ((afterKey == '' && i == 0) || next == 1) {
+      result[currentKey] = val;
+      next = 0;
+    }
+    if (k == afterKey) { next = 1; }
+    result[k] = v;
+    ++i;
+  });
+  if (next == 1) {
+    result[currentKey] = val;
+  }
+  if (next !== -1) {
+    return result;
+  } else {
+    return obj;
+  }
+}
+
 async function startScraping(url) {
   const browser = await puppeteer.launch({
     headless: false,
@@ -27,22 +53,31 @@ async function scrapeCPUMark() {
   await listPage.waitForSelector(".input-sm");
   await listPage.select(".input-sm", "-1");
   await listPage.waitForSelector(".odd a");
-  let cpus = await listPage.evaluate(() => {
-    return [...document.querySelectorAll(".odd a, .even a")].map(link => link.href);
-  });
+  const data = require("./data/cpu.json");
+  let cpus = await listPage.evaluate(names => {
+    return [...document.querySelectorAll(".odd a, .even a")]
+      .filter(link => !names.includes(link.textContent))
+      .map(link => link.href);
+  }, data.map(d => d.name));
   await listPage.close();
-  const data = [];
   async function getCPULink() {
     const page = await browser.newPage();
     while (true) {
       const url = cpus.shift();
       if (!url) break;
       try {
-        await page.goto(url);
-        await page.waitForSelector("li[style*=\"border: solid red\"]");
-        const detailsURL = await page.evaluate(() => {
-          return document.querySelector("li[style*=\"border: solid red\"] a").href;
-        });
+        let detailsURL;
+        if (url === "https://www.cpubenchmark.net/cpu_lookup.php?cpu=Intel+Core+i5-8265U+%40+1.60GHz&id=3323") {
+          detailsURL = "https://www.cpubenchmark.net/cpu.php?cpu=Intel+Core+i5-8265U+%40+1.60GHz&id=3323";
+        } else if (url === "https://www.cpubenchmark.net/cpu_lookup.php?cpu=Intel+Core+i3-5020U+%40+2.20GHz&id=2597") {
+          detailsURL = "https://www.cpubenchmark.net/cpu.php?cpu=Intel+Core+i3-5020U+%40+2.20GHz&id=2597";
+        } else {
+          await page.goto(url);
+          await page.waitForSelector("li[style*=\"border: solid red\"]");
+          detailsURL = await page.evaluate(() => {
+            return document.querySelector("li[style*=\"border: solid red\"] a").href;
+          });
+        }
         await page.goto(detailsURL);
         await page.waitForSelector(".cpuname");
         const details = {
@@ -54,9 +89,13 @@ async function scrapeCPUMark() {
             return Object.fromEntries([...document.querySelectorAll("#test-suite-results tr")].map(tr => {
               return [tr.querySelector("th").textContent, tr.querySelector("td").textContent];
             }))
-          }))
+          })),
+          hasSuperscript: await page.evaluate(() => {
+            return document.querySelector(".notes").textContent.includes("Single thread rating")
+          })
         }
         data.push(details);
+        console.log(details);
         write("./data/cpu.json", data);
         console.log(data.length);
       } catch {
@@ -75,11 +114,11 @@ async function scrapeCPUMark() {
 
 async function cleanCPUs() {
   let cpus = require("./data/cpu.json");
-  cpus = cpus.sort((a, b) => a.name.localeCompare(b.name));
-  for (const cpu of cpus) {
+  let updated = [];
+  for (let cpu of cpus.sort((a, b) => a.name.localeCompare(b.name))) {
     const updatedBenchmarks = {};
     for (const key in cpu) {
-      if (key != "name" && key != "stats") {
+      if (key != "name" && key != "stats" && key !== "hasSuperscript") {
         const newKey = "test_suite_" + key.toLowerCase().replaceAll(" ", "_");
         const value = parseFloat(cpu[key].match(/[\d\.,]+/)[0].replaceAll(",", ""));
         delete cpu[key];
@@ -123,10 +162,19 @@ async function cleanCPUs() {
       cpu.release_quarter = (parseInt(year) - 2007) * 4 + parseInt(quarter[1]);
     }
     cpu.name = cpu.name.replace(/ @.+Hz/, "");
+    if (cpu.hasSuperscript) {
+      cpu.cpu_mark_single_thread_rating = Math.floor(cpu.cpu_mark_single_thread_rating / 10);
+    }
+    if (!cpu.threads) {
+      cpu.threads = cpu.cores;
+    }
+    cpu = moveObjectElement("threads", "cores", cpu);
+    delete cpu["hasSuperscript"];
     delete cpu["stats"];
     Object.assign(cpu, updatedBenchmarks);
+    updated.push(cpu);
   }
-  write("./data/cpu_cleaned.json", cpus);
+  write("./data/cpu_cleaned.json", updated);
 }
 
 async function filterCPUs() {
@@ -248,7 +296,7 @@ async function scrapeUserBenchmark() {
     } catch (e) {
       console.log("Retrying " + cpu.name + " due to timeout");
       remaining.push(cpu);
-      await page.close(); 
+      await page.close();
       await new Promise(resolve => setTimeout(resolve, 30000));
       scrape();
     }
@@ -259,3 +307,37 @@ async function scrapeUserBenchmark() {
   }
   write("./data/cpu_userbenchmark.json", cpus);
 }
+
+async function cleanUserBenchmark() {
+  const cpus = require("./data/cpu_userbenchmark.json");
+  let updated = [];
+  for (let cpu of cpus) {
+    cpu = moveObjectElement("threads", "cores", cpu);
+    if (cpu.market_share) {
+      if (Object.keys(cpu.market_share).length === 0) {
+        delete cpu["market_share"];
+      } else {
+        const reordered = {};
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        for (let year = 15; year < 22; year++) {
+          for (const month of months) {
+            const key = month + " " + year;
+            if (cpu.market_share[key] !== undefined) {
+              reordered[key] = cpu.market_share[key];
+            }
+          }
+        }
+        cpu.market_share = reordered;
+      }
+    }
+    if (!cpu.userbenchmark_score) {
+      delete cpu["userbenchmark_score"];
+      delete cpu["userbenchmark_rank"];
+      delete cpu["userbenchmark_samples"];
+    }
+    updated.push(cpu);
+  }
+  write("./data/cpu_userbenchmark_cleaned.json", updated);
+}
+
+cleanUserBenchmark();

@@ -1,0 +1,29 @@
+---
+title: "CPU Performance Analysis"
+output: html_notebook
+---
+
+## Set-Up
+
+First, the necessary packages are loaded in.
+```{r}
+pacman::p_load(pacman, rio, rmarkdown, dplyr)
+```
+
+Next, we import our data into a dataframe.
+```{r}
+df <- import("../data/cpu_cleaned.json")
+head(df)
+```
+
+
+
+## Data Preparation
+
+It's clear that there is a lot of data, much of it being extraneous. Since I want to analyze CPU performance over time, I need to isolate the relevant columns and remove any rows with NaN entries in those columns.
+```{r}
+df <- df[, c("name", "cpu_mark_rating", "cpu_mark_single_thread_rating", "release_quarter")]
+cpu_perf <- na.omit(df)
+head(cpu_perf)
+```
+

@@ -1,6 +1,8 @@
 const puppeteer = require("puppeteer");
 const fs = require("fs");
 
+const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 async function write(path, data) {
   fs.writeFileSync(path, JSON.stringify(data, null, 2));
 }
@@ -41,9 +43,13 @@ async function startScraping(url) {
     args: [`--window-size=1000,700`],
     defaultViewport: null
   });
-  const page = await browser.newPage();
-  await page.goto(url);
-  return [browser, page];
+  if (url) {
+    const page = await browser.newPage();
+    await page.goto(url);
+    return [browser, page];
+  } else {
+    return [browser];
+  }
 }
 
 async function scrapeCPUMark() {
@@ -187,9 +193,7 @@ async function filterCPUs() {
 async function scrapeUserBenchmark() {
   const cpus = require("./data/cpu_userbenchmark.json");
   const remaining = cpus.filter(cpu => !cpu.market_share && cpu.userbenchmark_score === undefined);
-  const [browser] = await startScraping(
-    "about:blank"
-  );
+  const [browser] = await startScraping();
   let completed = cpus.length - remaining.length;
   async function scrape() {
     const cpu = remaining.shift();
@@ -318,7 +322,6 @@ async function cleanUserBenchmark() {
         delete cpu["market_share"];
       } else {
         const reordered = {};
-        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         for (let year = 15; year < 22; year++) {
           for (const month of months) {
             const key = month + " " + year;
@@ -329,6 +332,8 @@ async function cleanUserBenchmark() {
         }
         cpu.market_share = reordered;
       }
+      cpu.userbenchmark_market_share = cpu.market_share;
+      delete cpu["market_share"];
     }
     if (!cpu.userbenchmark_score) {
       delete cpu["userbenchmark_score"];
@@ -340,4 +345,52 @@ async function cleanUserBenchmark() {
   write("./data/cpu_userbenchmark_cleaned.json", updated);
 }
 
-cleanUserBenchmark();
+async function scrapePassmarkMarketShare() {
+  const cpus = require("./data/cpu_passmark_market_share.json");
+  const [browser] = await startScraping();
+  const page = await browser.newPage();
+  for (let year = 20; year < 22; year++) {
+    for (let month = 1; month < 13; month++) {
+      if (month === 8 && year === 21) break;
+      const prefixedMonth = month < 10 ? "0" + month : month;
+      const urlDate = `/20${year}${prefixedMonth}`;
+      if (urlDate === "/201904") {
+        await page.goto("https://web.archive.org/web/20190404194206/https://www.cpubenchmark.net/share30.html");
+      } else {
+        await page.goto(`https://web.archive.org/web${urlDate}1/https://www.cpubenchmark.net/share30.html`);
+      }
+      console.log(`https://web.archive.org/web${urlDate}1/https://www.cpubenchmark.net/share30.html`);
+      await page.waitForFunction(() => {
+        return document.querySelectorAll(".chart[id]").length % 200 === 0;
+      }, { timeout: 60000 });
+      const skipMonth = await page.evaluate(urlDate => {
+        return !window.location.href.includes(urlDate);
+      }, urlDate);
+      if (skipMonth) {
+        console.log(`Skipping ${prefixedMonth}/${year}`);
+      }
+      const isNewVersion = urlDate.localeCompare("/201909") > 0;
+      const top200 = await page.evaluate(isNewVersion => {
+        const selector = isNewVersion ? ".prdname" : ".chart[id]";
+        const rows = [...document.querySelectorAll(selector)].slice(0, 200);
+        const result = {};
+        for (const row of rows) {
+          const marketShareElement = isNewVersion ? row.nextElementSibling.nextElementSibling : row.parentElement.querySelector(".value");
+          result[row.textContent.trim().replace(/ @.+Hz/, "")] = parseFloat(marketShareElement.textContent.trim().slice(0, -1));
+        }
+        return result;
+      }, isNewVersion);
+      console.log(top200);
+      for (const cpu of cpus) {
+        if (!cpu.passmark_market_share) cpu.passmark_market_share = {};
+        const key = months[month - 1] + " " + year;
+        if (skipMonth) {
+          cpu.passmark_market_share[key] = null;
+        } else {
+          cpu.passmark_market_share[key] = top200[cpu.name] ?? 0;
+        }
+      }
+      write("./data/cpu_passmark_market_share.json", cpus)
+    }
+  }
+}

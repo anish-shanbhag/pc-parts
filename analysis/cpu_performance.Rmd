@@ -7,7 +7,7 @@ output: "github_document"
 
 First, the necessary packages are loaded in.
 ```{r}
-pacman::p_load(pacman, rio, dplyr, ggplot2)
+pacman::p_load(pacman, rio, dplyr, ggplot2, jsonlite)
 ```
 
 Next, we import our data into a dataframe.
@@ -15,8 +15,6 @@ Next, we import our data into a dataframe.
 df <- import("../data/cpu_cleaned.json")
 head(df)
 ```
-
-
 
 ## Data Preparation
 
@@ -77,7 +75,15 @@ Plotting the regression model and the prediction interval yields:
 ggplot(reg1, aes(x = release_quarter, y = cpu_mark_rating)) + geom_point(color = "blue") + geom_line(aes(y = lwr), color = "black", linetype = "dashed") + geom_line(aes(y = upr), color = "black", linetype = "dashed") + geom_line(aes(y = fit), color = "orange")
 ```
 
-This process will be repeated for single thread performance, except with the use of a simple linear regression.
+To check if this is an appropriate model, we examine the associated residual plot:
+```{r}
+res1 <- resid(p1_model)
+plot(reg1$release_quarter, res1)
+abline(0, 0)
+```
+
+
+This process will be repeated for single thread performance, except with the use of a simple linear model.
 ```{r}
 p2_model <- lm(cpu_mark_single_thread_rating ~ release_quarter, data = result)
 p2_pred_int <- predict(p2_model, interval = "prediction", level = 0.95)
@@ -91,12 +97,38 @@ reg2 <- reg2 %>%
 ggplot(reg2, aes(x = release_quarter, y = cpu_mark_single_thread_rating)) + geom_point(color = "red") + geom_line(aes(y = lwr), color = "black", linetype = "dashed") + geom_line(aes(y = upr), color = "black", linetype = "dashed") + geom_line(aes(y = fit), color = "green")
 ```
 ```{r}
-summary(p2_model)
+res2 <- resid(p2_model)
+plot(reg2$release_quarter, res2)
+abline(0, 0)
 ```
 
 
 ## Extrapolation and Rationale
 
+In general, regression models should *not* be used to extrapolate information, or to apply the models outside the scope of the provided data. This is because it is unknown whether or not a particular model will actually continue to hold outside of the data from which it was constructed. For instance, although we chose to use an exponential function to model the relationship between `cpu_mark_rating` and `release_quarter`, this model may not be accurate for, say, 2030 Q3. It could turn out that processor performance will reach a point at which improvements begin to slow down and follow a linear or logarithmic trend, or maybe even reach an asymptote.
+
+However, with that being said, we can make predictions outside of the data we obtained based on the *assumption* that overall and single thread performance will continue to follow our models within a reasonable time frame from now. Furthermore, uncertainty was taken into consideration in the form of prediction intervals. Since these intervals do widen as they extend further out, especially for the exponential model, the ranges they provide will eventually become unreasonable, which goes back to the discussion of making predictions within a logical time frame.
+
+For demonstration purposes, I've created two functions which output the predicted overall or single thread PassMark scores according to their respective models given a release quarter (which sort of acts as a date) as well as the corresponding prediction interval.
 ```{r}
-exp(predict(p1_model, newdata = data.frame(release_quarter = 76), interval = "prediction", level = 0.95))
+extrapolate_overall <- function(n) {
+  return(exp(predict(p1_model, newdata = data.frame(release_quarter = n), interval = "prediction", level = 0.95)))
+}
+
+extrapolate_single <- function(n) {
+  return(predict(p2_model, newdata = data.frame(release_quarter = n), interval = "prediction", level = 0.95))
+}
 ```
+
+Let's say we want to predict performance scores for 2025 Q4, which is late 2025. We first need to calculate the corresponding "release quarter" value:
+```{r}
+(2025 - 2007) * 4 + 4
+```
+
+Using 76 as the input, we get:
+```{r}
+extrapolate_overall(76)
+extrapolate_single(76)
+```
+
+This means that according to our models and assuming they still make some sense by then, we expect to see a top CPU overall PassMark score between 149443.2 and 424597.9 and a top single thread score between 3643.874 and 4447.796 by the end of 2025.

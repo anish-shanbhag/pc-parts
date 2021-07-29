@@ -6,18 +6,13 @@ CPU Performance Analysis
 First, the necessary packages are loaded in.
 
 ``` r
-pacman::p_load(pacman, rio, dplyr, ggplot2)
+pacman::p_load(pacman, rio, dplyr, ggplot2, jsonlite)
 ```
 
 Next, we import our data into a dataframe.
 
 ``` r
 df <- import("../data/cpu_cleaned.json")
-```
-
-    ## Loading required namespace: jsonlite
-
-``` r
 head(df)
 ```
 
@@ -194,8 +189,19 @@ ggplot(reg1, aes(x = release_quarter, y = cpu_mark_rating)) + geom_point(color =
 
 ![](cpu_performance_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
 
+To check if this is an appropriate model, we examine the associated
+residual plot:
+
+``` r
+res1 <- resid(p1_model)
+plot(reg1$release_quarter, res1)
+abline(0, 0)
+```
+
+![](cpu_performance_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+
 This process will be repeated for single thread performance, except with
-the use of a simple linear regression.
+the use of a simple linear model.
 
 ``` r
 p2_model <- lm(cpu_mark_single_thread_rating ~ release_quarter, data = result)
@@ -215,37 +221,81 @@ reg2 <- reg2 %>%
 ggplot(reg2, aes(x = release_quarter, y = cpu_mark_single_thread_rating)) + geom_point(color = "red") + geom_line(aes(y = lwr), color = "black", linetype = "dashed") + geom_line(aes(y = upr), color = "black", linetype = "dashed") + geom_line(aes(y = fit), color = "green")
 ```
 
-![](cpu_performance_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+![](cpu_performance_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
 
 ``` r
-summary(p2_model)
+res2 <- resid(p2_model)
+plot(reg2$release_quarter, res2)
+abline(0, 0)
 ```
 
-    ## 
-    ## Call:
-    ## lm(formula = cpu_mark_single_thread_rating ~ release_quarter, 
-    ##     data = result)
-    ## 
-    ## Residuals:
-    ##     Min      1Q  Median      3Q     Max 
-    ## -416.13  -90.89   25.63  101.61  457.23 
-    ## 
-    ## Coefficients:
-    ##                 Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept)     1113.593     62.315   17.87   <2e-16 ***
-    ## release_quarter   38.582      1.762   21.89   <2e-16 ***
-    ## ---
-    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
-    ## Residual standard error: 180.4 on 39 degrees of freedom
-    ## Multiple R-squared:  0.9247, Adjusted R-squared:  0.9228 
-    ## F-statistic: 479.3 on 1 and 39 DF,  p-value: < 2.2e-16
+![](cpu_performance_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
 ## Extrapolation and Rationale
 
+In general, regression models should *not* be used to extrapolate
+information, or to apply the models outside the scope of the provided
+data. This is because it is unknown whether or not a particular model
+will actually continue to hold outside of the data from which it was
+constructed. For instance, although we chose to use an exponential
+function to model the relationship between `cpu_mark_rating` and
+`release_quarter`, this model may not be accurate for, say, 2030 Q3. It
+could turn out that processor performance will reach a point at which
+improvements begin to slow down and follow a linear or logarithmic
+trend, or maybe even reach an asymptote.
+
+However, with that being said, we can make predictions outside of the
+data we obtained based on the *assumption* that overall and single
+thread performance will continue to follow our models within a
+reasonable time frame from now. Furthermore, uncertainty was taken into
+consideration in the form of prediction intervals. Since these intervals
+do widen as they extend further out, especially for the exponential
+model, the ranges they provide will eventually become unreasonable,
+which goes back to the discussion of making predictions within a logical
+time frame.
+
+For demonstration purposes, I’ve created two functions which output the
+predicted overall or single thread PassMark scores according to their
+respective models given a release quarter (which sort of acts as a date)
+as well as the corresponding prediction interval.
+
 ``` r
-exp(predict(p1_model, newdata = data.frame(release_quarter = 76), interval = "prediction", level = 0.95))
+extrapolate_overall <- function(n) {
+  return(exp(predict(p1_model, newdata = data.frame(release_quarter = n), interval = "prediction", level = 0.95)))
+}
+
+extrapolate_single <- function(n) {
+  return(predict(p2_model, newdata = data.frame(release_quarter = n), interval = "prediction", level = 0.95))
+}
+```
+
+Let’s say we want to predict performance scores for 2025 Q4, which is
+late 2025. We first need to calculate the corresponding “release
+quarter” value:
+
+``` r
+(2025 - 2007) * 4 + 4
+```
+
+    ## [1] 76
+
+Using 76 as the input, we get:
+
+``` r
+extrapolate_overall(76)
 ```
 
     ##        fit      lwr      upr
     ## 1 251899.3 149443.2 424597.9
+
+``` r
+extrapolate_single(76)
+```
+
+    ##        fit      lwr      upr
+    ## 1 4045.835 3643.874 4447.796
+
+This means that according to our models and assuming they still make
+some sense by then, we expect to see a top CPU overall PassMark score
+between 149443.2 and 424597.9 and a top single thread score between
+3643.874 and 4447.796 by the end of 2025.

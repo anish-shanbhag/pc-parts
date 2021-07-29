@@ -25,16 +25,10 @@ It's clear that there is a lot of data, much of it being extraneous. Since I wan
 df <- df[, c("name", "cpu_mark_rating", "cpu_mark_single_thread_rating", "release_quarter")]
 cpu_perf <- na.omit(df)
 
-# CHEAP FIX, REMOVE IN FINAL
-cpu_perf$cpu_mark_single_thread_rating[cpu_perf$cpu_mark_single_thread_rating > 4000] <- cpu_perf$cpu_mark_single_thread_rating %/% 10
-
-# PART 2 LMAO
-cpu_perf$cpu_mark_single_thread_rating[cpu_perf$release_quarter < 30 & cpu_perf$cpu_mark_single_thread_rating > 2500] <- cpu_perf$cpu_mark_single_thread_rating %/% 10
-
 head(cpu_perf)
 ```
 
-The *cpu_mark_rating* and *cpu_mark_single_thread_rating* columns refer to the overall and single thread scores, respectively, determined by the PassMark benchmark software for each CPU. The *release_quarter* column refers to an integer computed by taking the difference between the year of release and 2007, multiplying by four, and adding the year's quarter as an indication of time.
+The `cpu_mark_rating` and `cpu_mark_single_thread_rating` columns refer to the overall and single thread scores, respectively, determined by the PassMark benchmark software for each CPU. The `release_quarter` column refers to an integer computed by taking the difference between the year of release and 2007, multiplying by four, and adding the year's quarter as an indication of time.
 
 I want to examine how overall and single thread performance has changed over time. One way of displaying these improvements is plotting maximum scores for the CPUs in each release quarter. Plotting mean or median scores wouldn't make much sense since most CPUs are created for average consumers.
 
@@ -63,3 +57,46 @@ There does seem to be a positive association, though it is unclear if it is line
 
 ## Regression Analysis
 
+To create an exponential model for overall performance, I perform a least-squares regression with the natural logarithm of `cpu_mark_rating` and `release_quarter`.
+```{r}
+p1_model <- lm(log(cpu_mark_rating) ~ release_quarter, data = result)
+```
+
+Next, I calculate the 95% prediction intervals for the model.
+```{r}
+p1_pred_int <- predict(p1_model, interval = "prediction", level = 0.95)
+reg1 <- data.frame(cbind(result$release_quarter, result$cpu_mark_rating, exp(p1_pred_int)))
+reg1 <- reg1 %>%
+  rename(
+    release_quarter = V1,
+    cpu_mark_rating = V2
+  )
+```
+Plotting the regression model and the prediction interval yields:
+```{r}
+ggplot(reg1, aes(x = release_quarter, y = cpu_mark_rating)) + geom_point(color = "blue") + geom_line(aes(y = lwr), color = "black", linetype = "dashed") + geom_line(aes(y = upr), color = "black", linetype = "dashed") + geom_line(aes(y = fit), color = "orange")
+```
+
+This process will be repeated for single thread performance, except with the use of a simple linear regression.
+```{r}
+p2_model <- lm(cpu_mark_single_thread_rating ~ release_quarter, data = result)
+p2_pred_int <- predict(p2_model, interval = "prediction", level = 0.95)
+reg2 <- data.frame(cbind(result$release_quarter, result$cpu_mark_single_thread_rating, p2_pred_int))
+reg2 <- reg2 %>%
+  rename(
+    release_quarter = V1,
+    cpu_mark_single_thread_rating = V2
+  )
+
+ggplot(reg2, aes(x = release_quarter, y = cpu_mark_single_thread_rating)) + geom_point(color = "red") + geom_line(aes(y = lwr), color = "black", linetype = "dashed") + geom_line(aes(y = upr), color = "black", linetype = "dashed") + geom_line(aes(y = fit), color = "green")
+```
+```{r}
+summary(p2_model)
+```
+
+
+## Extrapolation and Rationale
+
+```{r}
+exp(predict(p1_model, newdata = data.frame(release_quarter = 76), interval = "prediction", level = 0.95))
+```

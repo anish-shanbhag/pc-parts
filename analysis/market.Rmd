@@ -1,0 +1,17 @@
+---
+title: "CPU and GPU Market Analysis"
+output: "github_document"
+---
+
+## Set-Up
+
+```{r}
+pacman::p_load(pacman, rio, dplyr, ggplot2)
+```
+
+Load the data:
+```{r}
+df <- import("../data/cpu_userbenchmark.json")
+df$market_share[1]
+```
+

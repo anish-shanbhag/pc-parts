@@ -16,62 +16,18 @@ df <- import("../data/cpu_cleaned.json")
 head(df)
 ```
 
-    ##                      name base_clock cores threads cpu_mark_overall_rank
-    ## 1 AArch64 rev 0 (aarch64)        2.5     8       8                  1589
-    ## 2 AArch64 rev 1 (aarch64)     2362.0     8       8                  1666
-    ## 3 AArch64 rev 2 (aarch64)        2.2     8       8                  1862
-    ## 4 AArch64 rev 4 (aarch64)     2112.0     8       8                  2042
-    ## 5             AC8257V/WAB     2001.0     8       8                  2805
-    ## 6              AMD 3015Ce        1.2     2       4                  2164
-    ##   cpu_mark_rating cpu_mark_single_thread_rating cpu_mark_cross_platform_rating
-    ## 1            2499                          1048                           6694
-    ## 2            2316                          1037                           6817
-    ## 3            1956                           925                           5495
-    ## 4            1658                           642                           3943
-    ## 5             693                           495                           1693
-    ## 6            1474                          1391                           4192
-    ##   cpu_mark_samples test_suite_integer_math test_suite_floating_point_math
-    ## 1               25                   25705                           6224
-    ## 2               45                   24516                           6025
-    ## 3               24                   22846                           5814
-    ## 4               43                   24632                           3724
-    ## 5                1                    8844                           1282
-    ## 6                1                   10231                           4968
-    ##   test_suite_find_prime_numbers test_suite_random_string_sorting
-    ## 1                            10                                8
-    ## 2                            10                                8
-    ## 3                             7                                8
-    ## 4                             5                                6
-    ## 5                             2                                3
-    ## 6                             8                                3
-    ##   test_suite_data_encryption test_suite_data_compression test_suite_physics
-    ## 1                      553.6                        53.0                214
-    ## 2                      493.3                        52.0                233
-    ## 3                      430.0                        42.7                184
-    ## 4                      473.1                        35.3                 92
-    ## 5                      205.5                        13.2                 53
-    ## 6                      267.0                        32.0                151
-    ##   test_suite_extended_instructions test_suite_single_thread  class socket
-    ## 1                             1018                     1048   <NA>   <NA>
-    ## 2                              832                     1037   <NA>   <NA>
-    ## 3                              766                      925   <NA>   <NA>
-    ## 4                              548                      642   <NA>   <NA>
-    ## 5                              211                      495   <NA>   <NA>
-    ## 6                              737                     1391 Mobile    FT5
-    ##   turbo_clock tdp release_quarter old_cpu_mark_rating
-    ## 1          NA  NA              NA                  NA
-    ## 2          NA  NA              NA                  NA
-    ## 3          NA  NA              NA                  NA
-    ## 4          NA  NA              NA                  NA
-    ## 5          NA  NA              NA                  NA
-    ## 6         2.3   6              NA                  NA
-    ##   old_cpu_mark_single_thread_rating
-    ## 1                                NA
-    ## 2                                NA
-    ## 3                                NA
-    ## 4                                NA
-    ## 5                                NA
-    ## 6                                NA
+<div class="kable-table">
+
+| name                    | base\_clock | cores | threads | cpu\_mark\_overall\_rank | cpu\_mark\_rating | cpu\_mark\_single\_thread\_rating | cpu\_mark\_cross\_platform\_rating | cpu\_mark\_samples | test\_suite\_integer\_math | test\_suite\_floating\_point\_math | test\_suite\_find\_prime\_numbers | test\_suite\_random\_string\_sorting | test\_suite\_data\_encryption | test\_suite\_data\_compression | test\_suite\_physics | test\_suite\_extended\_instructions | test\_suite\_single\_thread | class  | socket | turbo\_clock | tdp | release\_quarter | old\_cpu\_mark\_rating | old\_cpu\_mark\_single\_thread\_rating |
+|:------------------------|------------:|------:|--------:|-------------------------:|------------------:|----------------------------------:|-----------------------------------:|-------------------:|---------------------------:|-----------------------------------:|----------------------------------:|-------------------------------------:|------------------------------:|-------------------------------:|---------------------:|------------------------------------:|----------------------------:|:-------|:-------|-------------:|----:|-----------------:|-----------------------:|---------------------------------------:|
+| AArch64 rev 0 (aarch64) |         2.5 |     8 |       8 |                     1589 |              2499 |                              1048 |                               6694 |                 25 |                      25705 |                               6224 |                                10 |                                    8 |                         553.6 |                           53.0 |                  214 |                                1018 |                        1048 | NA     | NA     |           NA |  NA |               NA |                     NA |                                     NA |
+| AArch64 rev 1 (aarch64) |      2362.0 |     8 |       8 |                     1666 |              2316 |                              1037 |                               6817 |                 45 |                      24516 |                               6025 |                                10 |                                    8 |                         493.3 |                           52.0 |                  233 |                                 832 |                        1037 | NA     | NA     |           NA |  NA |               NA |                     NA |                                     NA |
+| AArch64 rev 2 (aarch64) |         2.2 |     8 |       8 |                     1862 |              1956 |                               925 |                               5495 |                 24 |                      22846 |                               5814 |                                 7 |                                    8 |                         430.0 |                           42.7 |                  184 |                                 766 |                         925 | NA     | NA     |           NA |  NA |               NA |                     NA |                                     NA |
+| AArch64 rev 4 (aarch64) |      2112.0 |     8 |       8 |                     2042 |              1658 |                               642 |                               3943 |                 43 |                      24632 |                               3724 |                                 5 |                                    6 |                         473.1 |                           35.3 |                   92 |                                 548 |                         642 | NA     | NA     |           NA |  NA |               NA |                     NA |                                     NA |
+| AC8257V/WAB             |      2001.0 |     8 |       8 |                     2805 |               693 |                               495 |                               1693 |                  1 |                       8844 |                               1282 |                                 2 |                                    3 |                         205.5 |                           13.2 |                   53 |                                 211 |                         495 | NA     | NA     |           NA |  NA |               NA |                     NA |                                     NA |
+| AMD 3015Ce              |         1.2 |     2 |       4 |                     2164 |              1474 |                              1391 |                               4192 |                  1 |                      10231 |                               4968 |                                 8 |                                    3 |                         267.0 |                           32.0 |                  151 |                                 737 |                        1391 | Mobile | FT5    |          2.3 |   6 |               NA |                     NA |                                     NA |
+
+</div>
 
 ## Data Preparation
 
@@ -86,20 +42,18 @@ cpu_perf <- na.omit(df)
 head(cpu_perf)
 ```
 
-    ##                       name cpu_mark_rating cpu_mark_single_thread_rating
-    ## 7                AMD 3015e            2678                          1408
-    ## 8                AMD 3020e            2611                          1472
-    ## 9                AMD 4700S           18045                          2389
-    ## 10 AMD A10 Micro-6700T APU            1291                           703
-    ## 11   AMD A10 PRO-7350B APU            1910                           911
-    ## 12   AMD A10 PRO-7800B APU            3194                          1497
-    ##    release_quarter
-    ## 7               54
-    ## 8               54
-    ## 9               58
-    ## 10              34
-    ## 11              30
-    ## 12              32
+<div class="kable-table">
+
+|     | name                    | cpu\_mark\_rating | cpu\_mark\_single\_thread\_rating | release\_quarter |
+|:----|:------------------------|------------------:|----------------------------------:|-----------------:|
+| 7   | AMD 3015e               |              2678 |                              1408 |               54 |
+| 8   | AMD 3020e               |              2611 |                              1472 |               54 |
+| 9   | AMD 4700S               |             18045 |                              2389 |               58 |
+| 10  | AMD A10 Micro-6700T APU |              1291 |                               703 |               34 |
+| 11  | AMD A10 PRO-7350B APU   |              1910 |                               911 |               30 |
+| 12  | AMD A10 PRO-7800B APU   |              3194 |                              1497 |               32 |
+
+</div>
 
 The `cpu_mark_rating` and `cpu_mark_single_thread_rating` columns refer
 to the overall and single thread scores, respectively, determined by the
@@ -123,13 +77,18 @@ result <- aggregate(cbind(cpu_mark_rating, cpu_mark_single_thread_rating) ~ rele
 head(result)
 ```
 
-    ##   release_quarter cpu_mark_rating cpu_mark_single_thread_rating
-    ## 1               1            1678                           827
-    ## 2               5            2705                          1446
-    ## 3               8            3288                          1452
-    ## 4               9            3386                          1503
-    ## 5              10            3354                          1571
-    ## 6              12            3471                          1546
+<div class="kable-table">
+
+| release\_quarter | cpu\_mark\_rating | cpu\_mark\_single\_thread\_rating |
+|-----------------:|------------------:|----------------------------------:|
+|                1 |              1678 |                               827 |
+|                5 |              2705 |                              1446 |
+|                8 |              3288 |                              1452 |
+|                9 |              3386 |                              1503 |
+|               10 |              3354 |                              1571 |
+|               12 |              3471 |                              1546 |
+
+</div>
 
 ## Plotting
 

@@ -1,6 +1,8 @@
 ---
 title: "CPU Performance Analysis"
-output: "github_document"
+output:
+  github_document:
+    df_print: kable
 ---
 
 ## Set-Up

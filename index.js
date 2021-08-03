@@ -1,3 +1,5 @@
+// TODO: https://github.com/puppeteer/puppeteer/issues/866
+
 const puppeteer = require("puppeteer");
 const fs = require("fs");
 
@@ -8,7 +10,7 @@ async function write(path, data) {
 }
 
 async function writeTemp(data) {
-  write("./temp/json", data);
+  write("./temp.json", data);
 }
 
 function moveObjectElement(currentKey, afterKey, obj) {
@@ -191,8 +193,13 @@ async function filterCPUs() {
 }
 
 async function scrapeUserBenchmark() {
-  const cpus = require("./data/cpu_userbenchmark.json");
-  const remaining = cpus.filter(cpu => !cpu.market_share && cpu.userbenchmark_score === undefined);
+  const cpus = require("./data/cpu_userbenchmark_updated.json");
+  //redo Mobile CPUs and AMD 3015e (or others with weird results)!
+  // core i3 6100TE
+  // temp.json contains the cpus that were duplicated from before
+  const remaining = cpus.filter(cpu => !cpu.market_share && cpu.userbenchmark_score === undefined);// cpus.filter(cpu => (cpu.userbenchmark_samples < 6 && cpu.cpu_mark_samples > 30) )//cpus.some(other => cpu.name !== other.name && cpu.userbenchmark_score && cpu.userbenchmark_samples === other.userbenchmark_samples && cpu.userbenchmark_score === other.userbenchmark_score && cpu.userbenchmark_memory_latency === other.userbenchmark_memory_latency))//cpu.userbenchmark_samples && cpu.userbenchmark_samples / cpu.cpu_mark_samples > 100 && cpu.userbenchmark_samples > 30000);//!cpu.market_share && cpu.userbenchmark_score === undefined);
+  // writeTemp(remaining.map(a => a.name))
+  console.log(remaining.map(a => a.name));
   const [browser] = await startScraping();
   let completed = cpus.length - remaining.length;
   async function scrape() {
@@ -214,7 +221,7 @@ async function scrapeUserBenchmark() {
       }
     });
     try {
-      await page.goto("https://cpu.userbenchmark.com/Search?searchTerm=" + cpu.name.replaceAll("-", " "), { waitFor: "domcontentloaded" });
+      await page.goto("https://cpu.userbenchmark.com/Search?searchTerm=" + cpu.name.replaceAll(/-|(Intel)|(AMD)/g, " ").split(/((?<=\d)[a-zA-Z]{1,2})/g).join(" "), { waitFor: "domcontentloaded" });
       await page.waitForSelector(".stealthlink, #searchForm, .btn-success");
       if (await page.$(".btn-success")) {
         console.log("Manually overriding");
@@ -222,16 +229,26 @@ async function scrapeUserBenchmark() {
         await page.waitForSelector(".stealthlink, #searchForm");
       }
       if (await page.$("#searchForm")) {
-        const link = await page.$(".tl-tag");
-        if (link) {
-          await page.goto(await page.$eval(".tl-tag", a => a.href), { waitFor: "domcontentloaded" });
+        const url = await page.evaluate(cpu => {
+          let maxSamples = -1;
+          let url;
+          for (const link of document.querySelectorAll(".tl-tag")) {
+            const samples = parseInt(link.querySelector(".tl-desc").textContent.split(" ")[0].replaceAll(",", ""));
+            if (samples > maxSamples && (!cpu.name.includes("PRO") || link.querySelector(".tl-title").textContent.includes("PRO"))) {
+              maxSamples = samples;
+              url = link.href;
+            }
+          }
+          return url;
+        }, cpu);
+        if (url) {
+          await page.goto(url, { waitFor: "domcontentloaded" });
           await page.waitForSelector(".stealthlink");
         } else {
-          // console.log("Skipped " + cpu.name);
           await page.close();
           console.log(++completed + " completed (skipped " + cpu.name + ")");
           cpu.market_share = {};
-          write("./data/cpu_userbenchmark.json", cpus);
+          write("./data/cpu_userbenchmark_updated.json", cpus);
           scrape();
           return;
         }
@@ -260,6 +277,12 @@ async function scrapeUserBenchmark() {
         }
         return stats;
       }, cpu);
+      /*
+      if ((stats.userbenchmark_samples < 10 && cpu.userbenchmark_samples > 10) || (stats.userbenchmark_samples > 20000 && cpu.userbenchmark_samples < 300)) console.log(cpu.name, stats.userbenchmark_samples);
+      await page.close();
+      scrape();
+      return
+      */
       if (stats.market_share) {
         const url = await page.evaluate(() => window.location.href);
         for (let year = 2020; year > 2015; year--) {
@@ -293,23 +316,23 @@ async function scrapeUserBenchmark() {
         }
       }
       Object.assign(cpu, stats);
-      write("./data/cpu_userbenchmark.json", cpus);
+      write("./data/cpu_userbenchmark_updated.json", cpus);
       console.log(++completed + " completed (" + cpu.name + " just finished)");
       await page.close();
       scrape();
     } catch (e) {
-      console.log("Retrying " + cpu.name + " due to timeout");
+      console.log(`Retrying ${cpu.name} due to error (${e.message})`);
       remaining.push(cpu);
       await page.close();
       await new Promise(resolve => setTimeout(resolve, 30000));
       scrape();
     }
   }
-  for (let i = 0; i < 1; i++) {
+  for (let i = 0; i < 8; i++) {
     scrape();
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
-  write("./data/cpu_userbenchmark.json", cpus);
+  write("./data/cpu_userbenchmark_updated.json", cpus);
 }
 
 async function cleanUserBenchmark() {
@@ -394,3 +417,49 @@ async function scrapePassmarkMarketShare() {
     }
   }
 }
+
+const cpus = require("./data/cpu_userbenchmark.json");
+const duplicates = [];
+for (const cpu of cpus) {
+  
+  const a = cpus.find(a => /* !((cpu.name + a.name).includes("AMD") && (cpu.name + a.name).includes("Intel")) && */ !duplicates.includes(cpu) && !duplicates.includes(a) && a.userbenchmark_score && cpu.userbenchmark_score && a.userbenchmark_samples && cpu.userbenchmark_samples && a.userbenchmark_score === cpu.userbenchmark_score && a.name !== cpu.name && cpu.userbenchmark_samples === a.userbenchmark_samples)
+  if (a) {
+    //console.log(a.name, cpu.name);
+    console.log(a.name, cpu.name);
+    duplicates.push(a, cpu);
+    console.log(duplicates.length);
+  }
+  
+  else if (cpu.cpu_mark_samples > 20 && cpu.userbenchmark_samples < 10 && !duplicates.includes(cpu)) {
+    console.log(cpu.name);
+    duplicates.push(cpu)
+  }
+  
+}
+//scrapeUserBenchmark();
+console.log(duplicates.length);
+/*
+let i = 0, total = 0, separate = 0;
+for (const cpu of cpus) {
+  for (const key in cpu.userbenchmark_market_share) {
+    if (cpu.passmark_market_share[key] && cpu.passmark_market_share[key] > 0 && cpu.userbenchmark_market_share[key] > 2 ) {
+      total += cpu.passmark_market_share[key] / cpu.userbenchmark_market_share[key];
+      if (cpu.passmark_market_share[key] - cpu.userbenchmark_market_share[key] > -0.1 && cpu.passmark_market_share[key] - cpu.userbenchmark_market_share[key] < 0.1) {
+        console.log(cpu.name, key, cpu.passmark_market_share[key], cpu.userbenchmark_market_share[key]);
+        separate++;
+      }
+      i++;
+    }
+  }
+}
+console.log(separate);
+for (const cpu of cpus) {
+  for (const key in cpu.passmark_market_share) {
+    if (!cpu.userbenchmark_market_share) continue;
+    if (cpu.passmark_market_share[key] > 0 && !cpu.userbenchmark_market_share[key]) {
+      //console.log(cpu.userbenchmark_market_share, key, cpu.passmark_market_share[key]);
+    }
+  }
+}
+console.log(total / i);
+*/

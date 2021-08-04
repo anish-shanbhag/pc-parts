@@ -195,45 +195,15 @@ async function filterCPUs() {
 }
 
 async function scrapeUserBenchmark() {
-  const cpus = require("./data/cpu_userbenchmark.json");
+  const cpus = require("./data/cpu_filtered.json");
   const overrides = require("./url-overrides.json");
-  // redo Mobile CPUs and AMD 3015e (or others with weird results)!
-  // core i3 6100TE
-  const remaining = [];
-  for (const cpu of cpus) {
-
-    const a = cpus.find(a => (!remaining.includes(cpu) || !remaining.includes(a)) && a.userbenchmark_score && cpu.userbenchmark_score && a.userbenchmark_samples && cpu.userbenchmark_samples && a.userbenchmark_score === cpu.userbenchmark_score && a.name !== cpu.name && cpu.userbenchmark_samples === a.userbenchmark_samples)
-    if (a) {
-      //console.log(a.name, cpu.name);
-      console.log(a.name, cpu.name);
-      remaining.push(a, cpu);
-      console.log(remaining.length);
-    }
-
-    else if (cpu.cpu_mark_samples > 20 && cpu.userbenchmark_samples < 10 && !remaining.includes(cpu)) {
-      console.log(cpu.name);
-      remaining.push(cpu)
-    }
-
-  }
-  // const remaining = cpus.filter(cpu => !cpu.market_share && cpu.userbenchmark_score === undefined);
-  console.log(remaining.map(a => a.name));
+  const remaining = cpus.slice();
   const [browser] = await startScraping();
   let completed = cpus.length - remaining.length;
   const urls = {};
   async function scrape() {
     const cpu = remaining.shift();
     if (!cpu) return;
-    delete cpu["userbenchmark_score"]
-    delete cpu["userbenchmark_rank"]
-    delete cpu["userbenchmark_samples"]
-    delete cpu["userbenchmark_memory_latency"]
-    delete cpu["userbenchmark_1_core"]
-    delete cpu["userbenchmark_2_core"]
-    delete cpu["userbenchmark_4_core"]
-    delete cpu["userbenchmark_8_core"]
-    delete cpu["userbenchmark_64_core"]
-    delete cpu["market_share"]
     console.log("Starting " + cpu.name);
     const page = await browser.newPage();
     let intercept = false;
@@ -269,7 +239,7 @@ async function scrapeUserBenchmark() {
           await page.close();
           console.log(++completed + " completed (skipped " + cpu.name + ")");
           cpu.market_share = {};
-          write("./data/cpu_userbenchmark_updated.json", cpus);
+          write("./data/cpu_userbenchmark.json", cpus);
           scrape();
           return;
         }
@@ -337,7 +307,7 @@ async function scrapeUserBenchmark() {
         }
       }
       Object.assign(cpu, stats);
-      write("./data/cpu_userbenchmark_updated.json", cpus);
+      write("./data/cpu_userbenchmark.json", cpus);
       console.log(++completed + " completed (" + cpu.name + " just finished)");
       await page.close();
       scrape();
@@ -353,7 +323,27 @@ async function scrapeUserBenchmark() {
     scrape();
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
-  write("./data/cpu_userbenchmark_updated.json", cpus);
+}
+
+function checkForInvalidUserBenchmarkData() {
+  const cpus = require("./data/cpu_userbenchmark.json");
+
+  const possiblyInvalid = [];
+  for (const cpu of cpus) {
+
+    const other = cpus.find(other => (!possiblyInvalid.includes(cpu) || !possiblyInvalid.includes(other)) && other.userbenchmark_score && cpu.userbenchmark_score && other.userbenchmark_samples && cpu.userbenchmark_samples && other.userbenchmark_score === cpu.userbenchmark_score && other.name !== cpu.name && cpu.userbenchmark_samples === other.userbenchmark_samples);
+    if (other) {
+      console.log("Duplicates:", other.name, cpu.name);
+      possiblyInvalid.push(other, cpu);
+    }
+    else if (cpu.cpu_mark_samples > 20 && cpu.userbenchmark_samples < 10 && !possiblyInvalid.includes(cpu)) {
+      //console.log("Sample mismatch:", cpu.name);
+      possiblyInvalid.push(cpu);
+    }
+  }
+  console.log("Total possible invalid CPUs:", possiblyInvalid.length);
+  console.log("See temp.json for details");
+  write("./temp.json", possiblyInvalid);
 }
 
 async function cleanUserBenchmark() {
@@ -369,6 +359,7 @@ async function cleanUserBenchmark() {
         for (let year = 15; year < 22; year++) {
           for (const month of months) {
             const key = month + " " + year;
+            if (key === "Aug 21") break;
             if (cpu.market_share[key] !== undefined) {
               reordered[key] = cpu.market_share[key];
             }
@@ -439,37 +430,12 @@ async function scrapePassmarkMarketShare() {
   }
 }
 
-function x() {
-  const cpus = require("./data/cpu_userbenchmark_updated.json");
-
-  const duplicates = [];
-  for (const cpu of cpus) {
-
-    const a = cpus.find(a => /* !((cpu.name + a.name).includes("AMD") && (cpu.name + a.name).includes("Intel")) && */(!duplicates.includes(cpu) || !duplicates.includes(a)) && a.userbenchmark_score && cpu.userbenchmark_score && a.userbenchmark_samples && cpu.userbenchmark_samples && a.userbenchmark_score === cpu.userbenchmark_score && a.name !== cpu.name && cpu.userbenchmark_samples === a.userbenchmark_samples)
-    if (a) {
-      //console.log(a.name, cpu.name);
-      console.log(a.name, cpu.name);
-      duplicates.push(a, cpu);
-      console.log(duplicates.length);
-    }
-
-    else if (cpu.cpu_mark_samples > 50 && cpu.userbenchmark_samples < 10 && !duplicates.includes(cpu)) {
-      console.log(cpu.name);
-      duplicates.push(cpu)
-    }
-
-  }
-  //scrapeUserBenchmark();
-  console.log(duplicates.length);
-  write("./temp.json", duplicates);
-}
-
-//scrapeUserBenchmark();
 /*
+const cpus = require("./data/cpu_passmark_market_share.json")
 let i = 0, total = 0, separate = 0;
 for (const cpu of cpus) {
   for (const key in cpu.userbenchmark_market_share) {
-    if (cpu.passmark_market_share[key] && cpu.passmark_market_share[key] > 0 && cpu.userbenchmark_market_share[key] > 2 ) {
+    if (cpu.passmark_market_share[key] && cpu.passmark_market_share[key] > 0 && cpu.userbenchmark_market_share[key] > 0.1 ) {
       total += cpu.passmark_market_share[key] / cpu.userbenchmark_market_share[key];
       if (cpu.passmark_market_share[key] - cpu.userbenchmark_market_share[key] > -0.1 && cpu.passmark_market_share[key] - cpu.userbenchmark_market_share[key] < 0.1) {
         console.log(cpu.name, key, cpu.passmark_market_share[key], cpu.userbenchmark_market_share[key]);

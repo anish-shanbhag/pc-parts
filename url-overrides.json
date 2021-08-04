@@ -83,5 +83,14 @@
   "Mobile Intel Pentium 4 2.80GHz": "https://cpu.userbenchmark.com/SpeedTest/861474/Mobile-IntelR-PentiumR-4-----CPU-280GHz",
   "Intel Celeron 550": "https://cpu.userbenchmark.com/SpeedTest/6495/IntelR-CeleronR-CPU----------550----200GHz",
   "Intel Pentium M 1.50GHz": "https://cpu.userbenchmark.com/SpeedTest/21190/IntelR-PentiumR-M-processor-150GHz",
-  "Intel Pentium G4400T": "https://cpu.userbenchmark.com/Search?searchTerm=!"
+  "Intel Pentium G4400T": "https://cpu.userbenchmark.com/Search?searchTerm=!",
+  "AMD Athlon 300GE": "https://cpu.userbenchmark.com/SpeedTest/985292/AMD-Athlon-300GE-with-Radeon-Vega-Graphics",
+  "Athlon 64 Dual Core 5000+": "https://cpu.userbenchmark.com/SpeedTest/195462/Athlon-64-Dual-Core-5000-",
+  "Mobile AMD Sempron 3100+": "https://cpu.userbenchmark.com/SpeedTest/711337/Mobile-AMD-Semprontm-3100-",
+  "AMD Turion Dual-Core RM-74": "https://cpu.userbenchmark.com/SpeedTest/254462/AMD-Turion-Dual-Core-RM-74",
+  "Intel Pentium D 805": "https://cpu.userbenchmark.com/Search?searchTerm=!",
+  "AMD A10 PRO-7350B APU": "https://cpu.userbenchmark.com/SpeedTest/24362/AMD-A10-PRO-7350B-R6-10-Compute-Cores-4C-6G",
+  "Intel Celeron 540": "https://cpu.userbenchmark.com/SpeedTest/8153/IntelR-CeleronR-CPU----------540----186GHz",
+  "Intel Celeron 440": "https://cpu.userbenchmark.com/SpeedTest/14453/IntelR-CeleronR-CPU----------440----200GHz",
+  "Intel Core i5-520M": "https://cpu.userbenchmark.com/SpeedTest/812/IntelR-CoreTM-i5-CPU-------M-520----240GHz"
 }

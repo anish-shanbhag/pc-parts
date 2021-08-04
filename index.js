@@ -122,6 +122,7 @@ async function scrapeCPUMark() {
 
 async function cleanCPUs() {
   let cpus = require("./data/cpu.json");
+  const invalid = require("./invalid-cpus.json");
   let updated = [];
   for (let cpu of cpus.sort((a, b) => a.name.localeCompare(b.name))) {
     const updatedBenchmarks = {};
@@ -170,6 +171,7 @@ async function cleanCPUs() {
       cpu.release_quarter = (parseInt(year) - 2007) * 4 + parseInt(quarter[1]);
     }
     cpu.name = cpu.name.replace(/ @.+Hz/, "");
+    if (invalid.includes(cpu.name)) continue;
     if (cpu.hasSuperscript) {
       cpu.cpu_mark_single_thread_rating = Math.floor(cpu.cpu_mark_single_thread_rating / 10);
     }
@@ -194,12 +196,13 @@ async function filterCPUs() {
 
 async function scrapeUserBenchmark() {
   const cpus = require("./data/cpu_userbenchmark.json");
+  const overrides = require("./url-overrides.json");
   // redo Mobile CPUs and AMD 3015e (or others with weird results)!
   // core i3 6100TE
   const remaining = [];
   for (const cpu of cpus) {
 
-    const a = cpus.find(a => /* !((cpu.name + a.name).includes("AMD") && (cpu.name + a.name).includes("Intel")) && */(!remaining.includes(cpu) || !remaining.includes(a)) && a.userbenchmark_score && cpu.userbenchmark_score && a.userbenchmark_samples && cpu.userbenchmark_samples && a.userbenchmark_score === cpu.userbenchmark_score && a.name !== cpu.name && cpu.userbenchmark_samples === a.userbenchmark_samples)
+    const a = cpus.find(a => (!remaining.includes(cpu) || !remaining.includes(a)) && a.userbenchmark_score && cpu.userbenchmark_score && a.userbenchmark_samples && cpu.userbenchmark_samples && a.userbenchmark_score === cpu.userbenchmark_score && a.name !== cpu.name && cpu.userbenchmark_samples === a.userbenchmark_samples)
     if (a) {
       //console.log(a.name, cpu.name);
       console.log(a.name, cpu.name);
@@ -217,9 +220,20 @@ async function scrapeUserBenchmark() {
   console.log(remaining.map(a => a.name));
   const [browser] = await startScraping();
   let completed = cpus.length - remaining.length;
+  const urls = {};
   async function scrape() {
     const cpu = remaining.shift();
     if (!cpu) return;
+    delete cpu["userbenchmark_score"]
+    delete cpu["userbenchmark_rank"]
+    delete cpu["userbenchmark_samples"]
+    delete cpu["userbenchmark_memory_latency"]
+    delete cpu["userbenchmark_1_core"]
+    delete cpu["userbenchmark_2_core"]
+    delete cpu["userbenchmark_4_core"]
+    delete cpu["userbenchmark_8_core"]
+    delete cpu["userbenchmark_64_core"]
+    delete cpu["market_share"]
     console.log("Starting " + cpu.name);
     const page = await browser.newPage();
     let intercept = false;
@@ -235,7 +249,11 @@ async function scrapeUserBenchmark() {
       }
     });
     try {
-      await page.goto("https://cpu.userbenchmark.com/Search?searchTerm=" + cpu.name.replaceAll(/-|(Intel)|(AMD)/g, " "), { waitFor: "domcontentloaded" });
+      if (overrides[cpu.name]) {
+        await page.goto(overrides[cpu.name]), { waitFor: "domcontentloaded" };
+      } else {
+        await page.goto("https://cpu.userbenchmark.com/Search?searchTerm=" + cpu.name.replaceAll(/-|(Intel)|(AMD)/g, " "), { waitFor: "domcontentloaded" });
+      }
       await page.waitForSelector(".stealthlink, #searchForm, .btn-success");
       if (await page.$(".btn-success")) {
         console.log("Manually overriding");
@@ -280,6 +298,12 @@ async function scrapeUserBenchmark() {
         }
         return stats;
       }, cpu);
+      // note: this only records duplicates/invalid data using what's already been scraped, so you may want to rerun the scraper to make it accurate
+      const other = cpus.find(other => (!remaining.includes(cpu) || !remaining.includes(other)) && other.userbenchmark_score && cpu.userbenchmark_score && other.userbenchmark_samples && cpu.userbenchmark_samples && other.userbenchmark_score === cpu.userbenchmark_score && other.name !== cpu.name && cpu.userbenchmark_samples === other.userbenchmark_samples)
+      if (other || cpu.cpu_mark_samples > 20 && cpu.userbenchmark_samples < 10 && !remaining.includes(cpu)) {
+        urls[cpu.name] = await page.evaluate(() => window.location.href);
+        writeTemp(urls);
+      }
       if (stats.market_share) {
         const url = await page.evaluate(() => window.location.href);
         for (let year = 2020; year > 2015; year--) {
@@ -415,28 +439,32 @@ async function scrapePassmarkMarketShare() {
   }
 }
 
-const cpus = require("./data/cpu_userbenchmark_updated.json");
-const duplicates = [];
-for (const cpu of cpus) {
+function x() {
+  const cpus = require("./data/cpu_userbenchmark_updated.json");
 
-  const a = cpus.find(a => /* !((cpu.name + a.name).includes("AMD") && (cpu.name + a.name).includes("Intel")) && */(!duplicates.includes(cpu) || !duplicates.includes(a)) && a.userbenchmark_score && cpu.userbenchmark_score && a.userbenchmark_samples && cpu.userbenchmark_samples && a.userbenchmark_score === cpu.userbenchmark_score && a.name !== cpu.name && cpu.userbenchmark_samples === a.userbenchmark_samples)
-  if (a) {
-    //console.log(a.name, cpu.name);
-    console.log(a.name, cpu.name);
-    duplicates.push(a, cpu);
-    console.log(duplicates.length);
+  const duplicates = [];
+  for (const cpu of cpus) {
+
+    const a = cpus.find(a => /* !((cpu.name + a.name).includes("AMD") && (cpu.name + a.name).includes("Intel")) && */(!duplicates.includes(cpu) || !duplicates.includes(a)) && a.userbenchmark_score && cpu.userbenchmark_score && a.userbenchmark_samples && cpu.userbenchmark_samples && a.userbenchmark_score === cpu.userbenchmark_score && a.name !== cpu.name && cpu.userbenchmark_samples === a.userbenchmark_samples)
+    if (a) {
+      //console.log(a.name, cpu.name);
+      console.log(a.name, cpu.name);
+      duplicates.push(a, cpu);
+      console.log(duplicates.length);
+    }
+
+    else if (cpu.cpu_mark_samples > 50 && cpu.userbenchmark_samples < 10 && !duplicates.includes(cpu)) {
+      console.log(cpu.name);
+      duplicates.push(cpu)
+    }
+
   }
-
-  else if (cpu.cpu_mark_samples > 50 && cpu.userbenchmark_samples < 10 && !duplicates.includes(cpu)) {
-    console.log(cpu.name);
-    duplicates.push(cpu)
-  }
-
+  //scrapeUserBenchmark();
+  console.log(duplicates.length);
+  write("./temp.json", duplicates);
 }
+
 //scrapeUserBenchmark();
-console.log(duplicates.length);
-write("./temp.json", duplicates);
-scrapeUserBenchmark();
 /*
 let i = 0, total = 0, separate = 0;
 for (const cpu of cpus) {

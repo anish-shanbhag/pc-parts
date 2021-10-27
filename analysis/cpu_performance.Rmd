@@ -46,14 +46,16 @@ Let's first look at overall performance.
 ggplot(result, aes(x = release_quarter, y = cpu_mark_rating)) + geom_point(color = "blue")
 ```
 
-There appears to be a strong, positive exponential relationship.
+There appears to be a strong, positive exponential relationship. This makes sense as these overall scores reflect multi-threaded performance, and CPUs are being designed with increasing numbers of cores and there have been improvements in multi-threading technologies like Intel's Hyper-Threading and AMD's Simultaneous Multi-Threading.
 
 Next, let's look at single thread performance.
 ```{r}
 ggplot(result, aes(x = release_quarter, y = cpu_mark_single_thread_rating)) + geom_point(color = "red")
 ```
 
-There does seem to be a positive association, though it is unclear if it is linear or nonlinear.
+There does seem to be a moderately strong positive linear association between time passed and single thread performance of the best CPUs of each quarter. This makes sense as single thread performance is largely dictated by the CPU's frequency, number of transistors, power draw, and thermal stability. Improvements in each of these have been fairly slow yet steady, and the data appears to reflect these changes in increasing single thread performance.
+
+However, an issue with using a linear model specifically for predicting single thread performance is that it is bottlenecked by physical and technological capabilities. There can only be so many transistors that fit on the face of a processor, and how high a clock speed can be pushed is limited by the cooling required to compensate for higher power draw. In other words, it is likely that the rate of increase in single thread performance will slow down, but with the given data this cannot be properly reflected.
 
 ## Regression Analysis
 

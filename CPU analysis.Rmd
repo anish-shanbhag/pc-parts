@@ -1,0 +1,632 @@
+---
+title: "PC Parts Project - CPU Data EDA"
+output:
+  github_document:
+    df_print: kable
+    toc: true
+    toc_depth: 4
+    fig_width: 12
+    fig_height: 8
+---
+
+## Introduction
+
+In this report, we will be performing basic exploratory data analysis on data that has been scraped from PassMark and UserBenchmark for CPUs released within the last few decades, which contains information on make and performance for those processors.
+
+We decided to pursue this project because of our shared interest in computer hardware as well as the broader gaming and technology industries. Moreover, we were curious about what kinds of data regarding various PC parts we would be able to obtain from the Internet, the process and challenges of obtaining them, and ultimately what insights we as consumers could gain from that information.
+
+
+## Data
+
+The data sets that we will be examining are `cpu_cleaned.json`, which contains descriptive and performance data for all CPUs listed on PassMark at the time, and `cpu_userbenchmark_cleaned.json`, which contains the data from PassMark merged with benchmark scores from UserBenchmark for CPUs that are either desktop or laptop chips (server chips and other miscellaneous ones were excluded due to lack of data on UserBenchmark).
+
+```{r}
+library(jsonlite)
+passmark <- fromJSON("data/cpu_cleaned.json")
+combined_filtered <- fromJSON("data/cpu_userbenchmark_cleaned.json")
+```
+
+Let's take a look at the first few rows of each dataframe and their respective structures.
+
+```{r}
+head(passmark)
+head(combined_filtered)
+
+str(passmark)
+str(combined_filtered)
+```
+
+### Further Cleaning
+
+The majority of data cleaning and formatting was incorporated into the original scraper in `index.js`, but there are some fields that are not needed and can be removed.
+
+The variables `old_cpu_mark_rating` and `old_cpu_mark_single_thread_rating` represent outdated information, so they are extraneous.
+
+We also notice that the `userbenchmark_market_share` variable in `combined_filtered` is a nested dataframe; furthermore, it will be irrelevant for this analysis, so we can also drop the column.
+
+```{r}
+passmark <- subset(passmark, select = -c(old_cpu_mark_rating, old_cpu_mark_single_thread_rating, cpu_mark_cross_platform_rating))
+combined_filtered <- subset(combined_filtered, select = -c(old_cpu_mark_rating, old_cpu_mark_single_thread_rating, userbenchmark_market_share, cpu_mark_cross_platform_rating))
+
+str(passmark)
+str(combined_filtered)
+```
+
+Moreover, some of the base clock speeds are in Hz.
+
+```{r}
+passmark$base_clock = ifelse(passmark$base_clock > 100, 
+                             passmark$base_clock / 1000, passmark$base_clock)
+passmark$turbo_clock = ifelse(passmark$turbo_clock > 10, 
+                              passmark$turbo_clock / 10, passmark$turbo_clock)
+
+combined_filtered$base_clock = ifelse(combined_filtered$base_clock > 100, 
+                             combined_filtered$base_clock / 1000, combined_filtered$base_clock)
+combined_filtered$turbo_clock = ifelse(combined_filtered$turbo_clock > 10, 
+                              combined_filtered$turbo_clock / 10, combined_filtered$turbo_clock)
+```
+
+
+### Relevant Variables
+
+Since the columns in `passmark` are included in `combined_filtered`, I will reference the variables in `combined_filtered`. The relevant variables and their descriptions are as follows:
+
+* name
+  + The name of the processor
+* class
+  + The type of processor (desktop, laptop, mobile, server)
+* base_clock
+  + Base clock frequency, measured in GHz
+* turbo_clock
+  + Boost clock frequency, measured in GHz
+* cores
+  + Number of cores
+* threads
+  + Number of threads (will always be either 1x or 2x number of cores)
+* tdp
+  + Thermal design power, measured in watts
+* release_quarter
+  + Fiscal quarter that the CPU was released, with 1 = Q1 2007
+* cpu_mark_overall_rank
+  + Ranking of the CPU with respect to PassMark score
+* cpu_mark_rating
+  + Overall PassMark benchmark score
+* cpu_mark_single_thread_rating
+  + Single-threaded Passmark benchmark score
+* cpu_mark_samples
+  + Number of samples
+
+The following are different metrics tested in PassMark's performance test and the corresponding scores, measured typically in millions of operations per second:
+
+* test_suite_integer_math
+* test_suite_floating_point_math
+* test_suite_find_prime_numbers
+* test_suite_random_string_sorting
+* test_suite_data_encryption
+* test_suite_data_compression
+* test_suite_physics
+* test_suite_extended_instructions
+* test_suite_single_thread
+
+Continuing,
+
+* userbenchmark_score
+  + UserBenchmark score, measured as a percentile relative to the Intel i9-9900K which approximately represents 100%
+* userbenchmark_rank
+  + Ranking of the CPU with respect to UserBenchmark score
+* userbenchmark_samples
+  + Number of samples
+* userbenchmark_memory_latency
+  + Score assigned to CPU memory latency
+* userbenchmark_1_core
+  + Single core mixed CPU speed score
+* userbenchmark_2_core
+  + Dual core mixed CPU speed score
+* userbenchmark_4_core
+  + Quad core mixed CPU speed score
+* userbenchmark_8_core
+  + Octa core mixed CPU speed score
+* userbenchmark_64_core
+  + Multi core mixed CPU speed score
+* socket
+  + Type of socket used on motherboard
+* userbenchmark_efps
+  + Average effective frames per second across multiple popular video games
+
+
+## Exploratory Data Analysis
+### Visualizations and Modeling
+
+#### Basic Plots
+
+```{r}
+# Create brand variable
+passmark$brand = ifelse(substr(passmark$name, 1, 3) == "AMD", "AMD", 
+                        ifelse(substr(passmark$name, 1, 5) == "Intel", 
+                               "Intel", "Other"))
+combined_filtered$brand = ifelse(substr(combined_filtered$name, 1, 3) == "AMD", "AMD", 
+                                 ifelse(substr(combined_filtered$name, 1, 5) == "Intel", 
+                                        "Intel", "Other"))
+
+# Bar chart of brands
+tbl <- with(passmark, table(brand))
+barplot(tbl, main = "CPU Brand Distribution", 
+        xlab = "Brand", ylab = "Count", col = c("red", "blue", "green"))
+```
+
+
+```{r}
+# Bar chart of class
+tbl2 <- with(passmark, table(class))
+barplot(tbl2, main = "CPU Class Distribution", 
+        xlab = "Class", ylab = "Count")
+```
+
+
+```{r}
+# Boxplots for base and turbo clock speeds
+boxplot(passmark[, c("base_clock", "turbo_clock")], 
+        main = "Base and Turbo Clock Speeds", 
+        names = c("Base", "Turbo"), ylab = "Speed (GHz)")
+```
+
+
+```{r}
+# Boxplots for numbers of cores and threads
+boxplot(passmark[, c("cores", "threads")], 
+        main = "Numbers of Cores and Threads", 
+        names = c("Cores", "Threads"), ylab = "Count")
+```
+
+
+```{r}
+# Histogram of TDP
+hist(passmark$tdp, main = "Histogram of TDPs", 
+     xlab = "TDP (watts)")
+```
+
+
+```{r}
+# Plot of CPUs released over time by quarter
+library(zoo)
+passmark$yearqtr = as.yearqtr(2007 + (passmark$release_quarter - 1) / 4)
+combined_filtered$yearqtr = as.yearqtr(2007 + (combined_filtered$release_quarter - 1) / 4)
+tbl2 <- with(passmark, table(yearqtr))
+plot(tbl2, main = "Number of Processors Per Quarter", 
+     xlab = "Year Quarter", ylab = "Count")
+```
+
+
+```{r}
+# Histogram of benchmark scores
+hist(passmark$cpu_mark_rating, 
+     main = "Histogram of PassMark Scores", xlab = "Score")
+hist(combined_filtered$userbenchmark_score, 
+     main = "Histogram of UserBenchmark Scores", 
+     xlab = "Score")
+```
+
+
+```{r}
+# Bar chart of socket types and respective counts
+tbl3 <- with(passmark, table(socket))
+sockets <- sort(tbl3, decreasing = T)
+sockets <- head(sockets, 5)
+
+barplot(sockets, main = "Top 5 CPU Sockets", xlab = "Socket", 
+        ylab = "Count")
+```
+
+
+#### Single- and Multi-Threaded Performance Over Time (PassMark)
+
+I want to examine how overall and single thread performance has changed over time. One way of displaying these improvements is plotting maximum scores for the CPUs in each release quarter. Plotting mean or median scores wouldn't make much sense since most CPUs are created for average consumers.
+
+In order to do this, I need to create a new dataframe that takes `passmark`, groups by release quarter, and finds both maximum scores.
+
+```{r}
+result <- aggregate(cbind(cpu_mark_rating, cpu_mark_single_thread_rating) ~ yearqtr, data = passmark, max)
+
+head(result)
+```
+
+Let's first look at overall performance.
+
+```{r}
+library(ggplot2)
+ggplot(result, aes(x = yearqtr, y = cpu_mark_rating)) + geom_point(color = "blue")
+```
+
+There appears to be a strong, positive exponential relationship. This makes sense as these overall scores reflect multi-threaded performance, and CPUs are being designed with increasing numbers of cores and there have been improvements in multi-threading technologies like Intel's Hyper-Threading and AMD's Simultaneous Multi-Threading.
+
+Next, let's look at single thread performance.
+
+```{r}
+ggplot(result, aes(x = yearqtr, y = cpu_mark_single_thread_rating)) + geom_point(color = "red")
+```
+
+There does seem to be a moderately strong positive linear association between time passed and single thread performance of the best CPUs of each quarter. This makes sense as single thread performance is largely dictated by the CPU's frequency, number of transistors, power draw, and thermal stability. Improvements in each of these have been fairly slow yet steady, and the data appears to reflect these changes in increasing single thread performance.
+
+However, an issue with using a linear model specifically for predicting single thread performance is that it is bottlenecked by physical and technological capabilities. There can only be so many transistors that fit on the face of a processor, and how high a clock speed can be pushed is limited by the cooling required to compensate for higher power draw. In other words, it is likely that the rate of increase in single thread performance will slow down, but with the given data this cannot be properly reflected.
+
+
+To create an exponential model for overall performance, I perform a least-squares regression with the natural logarithm of `cpu_mark_rating` and `yearqtr`.
+
+```{r}
+p1_model <- lm(log(cpu_mark_rating) ~ yearqtr, data = result)
+```
+
+Next, I calculate the 95% prediction intervals for the model.
+
+```{r}
+library(dplyr)
+p1_pred_int <- predict(p1_model, interval = "prediction", level = 0.95)
+reg1 <- data.frame(cbind(result$yearqtr, result$cpu_mark_rating, exp(p1_pred_int)))
+reg1 <- reg1 %>%
+  rename(
+    yearqtr = V1,
+    cpu_mark_rating = V2
+  )
+```
+
+Plotting the regression model and the prediction interval yields:
+
+```{r}
+ggplot(reg1, aes(x = yearqtr, y = cpu_mark_rating)) + geom_point(color = "blue") + geom_line(aes(y = lwr), color = "black", linetype = "dashed") + geom_line(aes(y = upr), color = "black", linetype = "dashed") + geom_line(aes(y = fit), color = "orange")
+```
+
+To check if this is an appropriate model, we examine the associated residual plot:
+
+```{r}
+res1 <- resid(p1_model)
+plot(reg1$yearqtr, res1)
+abline(0, 0)
+```
+
+
+This process will be repeated for single thread performance, except with the use of a simple linear model.
+
+```{r}
+p2_model <- lm(cpu_mark_single_thread_rating ~ yearqtr, data = result)
+p2_pred_int <- predict(p2_model, interval = "prediction", level = 0.95)
+reg2 <- data.frame(cbind(result$yearqtr, result$cpu_mark_single_thread_rating, p2_pred_int))
+reg2 <- reg2 %>%
+  rename(
+    yearqtr = V1,
+    cpu_mark_single_thread_rating = V2
+  )
+
+ggplot(reg2, aes(x = yearqtr, y = cpu_mark_single_thread_rating)) + geom_point(color = "red") + geom_line(aes(y = lwr), color = "black", linetype = "dashed") + geom_line(aes(y = upr), color = "black", linetype = "dashed") + geom_line(aes(y = fit), color = "green")
+```
+
+```{r}
+res2 <- resid(p2_model)
+plot(reg2$yearqtr, res2)
+abline(0, 0)
+```
+
+
+#### Regressing on PassMark and UserBenchmark Scores
+
+As consumers, it's important to get an understanding of how different benchmark platforms come up with their scores as well as the features of a CPU that influence those scores.
+
+To begin, we would like to examine what variables are correlated with PassMark's `cpu_mark_rating`. We start by logically choosing the variables that would make sense to have an effect on the overall score:
+
+* base_clock
+* turbo_clock
+* cores
+* threads
+* tdp
+* release_quarter
+* cpu_mark_samples
+
+Earlier, we saw that the distribution of `cpu_mark_rating` is heavily right skewed, so we might want to try a log transformation.
+
+```{r}
+# Apply log transform
+passmark$log_cpu_mark_rating <- log(passmark$cpu_mark_rating)
+
+# Check resulting distribution
+boxplot(passmark$log_cpu_mark_rating, main = "Distribution of Log-Transformed PassMark Overall Scores", col = "light blue")
+hist(passmark$log_cpu_mark_rating, main = "Distribution of Log-Transformed PassMark Overall Scores", col = "light blue")
+```
+
+Let's create a subset of `passmark` with the relevant variables.
+
+```{r}
+passmark2 <- passmark[, c("log_cpu_mark_rating", "base_clock", 
+                          "turbo_clock", "cores", "threads", "tdp", 
+                          "release_quarter", "cpu_mark_samples")]
+```
+
+To visualize the relationships between the variables, correlation plots will be created.
+
+```{r}
+library(corrplot)
+sigcorr <- cor.mtest(passmark2, conf.level = .95)
+corrplot.mixed(cor(passmark2, use="pairwise.complete.obs", method="pearson"), 
+               lower.col="black", upper = "ellipse", 
+               tl.col = "black", number.cex=.7, tl.pos = "lt", tl.cex=.7, 
+               p.mat = sigcorr$p, sig.level = .05)
+
+source("http://www.reuningscherer.net/s&ds230/Rfuncs/regJDRS.txt")
+pairsJDRS(passmark2)
+```
+
+There appears to be a high multicollinearity between `cores` and `threads` as well as `base_clock` and `turbo_clock`. Let's omit `cores` and `base_clock`.
+
+```{r}
+passmark3 <- passmark2[, c("log_cpu_mark_rating", "turbo_clock", "threads", 
+                           "tdp", "release_quarter", "cpu_mark_samples")]
+
+# Repeat
+sigcorr <- cor.mtest(passmark3, conf.level = .95)
+corrplot.mixed(cor(passmark3, use="pairwise.complete.obs", method="pearson"), 
+               lower.col="black", upper = "ellipse", 
+               tl.col = "black", number.cex=.7, tl.pos = "lt", tl.cex=.7, 
+               p.mat = sigcorr$p, sig.level = .05)
+
+pairsJDRS(passmark3)
+```
+
+Let's proceed with multiple regression.
+
+```{r}
+lm1 <- lm(log_cpu_mark_rating ~ turbo_clock + threads + tdp + release_quarter +
+            cpu_mark_samples, data = passmark3)
+summary(lm1)
+```
+
+
+Let's repeat this for UserBenchmark scores.
+
+```{r}
+userbenchmark <- combined_filtered[, c("userbenchmark_score", "turbo_clock",
+                                       "threads", "tdp", "release_quarter", 
+                                       "userbenchmark_samples")]
+
+
+sigcorr <- cor.mtest(userbenchmark, conf.level = .95)
+corrplot.mixed(cor(userbenchmark, use="pairwise.complete.obs", method="pearson"), 
+               lower.col="black", upper = "ellipse", 
+               tl.col = "black", number.cex=.7, tl.pos = "lt", tl.cex=.7, 
+               p.mat = sigcorr$p, sig.level = .05)
+
+pairsJDRS(userbenchmark)
+
+lm2 <- lm(userbenchmark_score ~ turbo_clock + threads + tdp + release_quarter +
+            userbenchmark_samples, data = userbenchmark)
+summary(lm2)
+```
+
+
+### Hypothesis Testing
+#### Performance Between Processor Classes
+
+We would like to compare the overall and single-threaded PassMark scores across the different CPU classes - Desktop, Laptop, Mobile, and Server - and see if any of the groups are significantly different from each other in terms of performance.
+
+We first look at the distributions of overall PassMark scores by class.
+
+```{r}
+boxplot(passmark$cpu_mark_rating ~ passmark$class)
+```
+
+It's pretty clear that `cpu_mark_rating` is non-normally distributed across `class`, so I'm going to try a Box-Cox transformation.
+
+```{r}
+library(car)
+boxCox(lm(cpu_mark_rating ~ class, data = passmark))
+```
+
+Box-Cox suggests a lambda of about 0, which means a log transformation would be best.
+
+```{r}
+boxplot(log(passmark$cpu_mark_rating) ~ passmark$class)
+```
+
+Variances do not seem to be equal, but let's check the ratio of largest sample standard deviation to smallest.
+
+```{r}
+sds <- tapply(passmark$log_cpu_mark_rating, passmark$class, sd)
+max(sds)/min(sds)
+```
+
+This is a pretty reasonable ratio, so we can proceed with one way ANOVA.
+
+```{r}
+aov1 <- aov(passmark$log_cpu_mark_rating ~ passmark$class)
+summary(aov1)
+```
+
+The results of the ANOVA test suggest that the groups are indeed different, so a Tukey test should be performed to find which groups are different from which.
+
+```{r}
+TukeyHSD(aov1)
+par(mar=c(5, 8, 4, 1))
+plot(TukeyHSD(aov1), las = 1)
+```
+
+It's clear that every CPU class differs from each other except Mobile with Laptop with respect to log-transformed overall PassMark scores, with Server CPUs having significantly greater mean log scores when compared to Laptop, Desktop, and Mobile CPUs.
+
+We should finally check our residual plots.
+
+```{r}
+source("http://www.reuningscherer.net/s&ds230/Rfuncs/regJDRS.txt")
+myResPlots(aov1, label = "Log Overall PassMark Score")
+```
+
+There does not appear to be any heteroskedasticity or glaringly large residuals.
+
+Let's repeat the process for single-threaded scores.
+
+```{r}
+boxplot(passmark$cpu_mark_single_thread_rating ~ passmark$class)
+
+# No need to transform, check standard deviations
+sds <- tapply(passmark$cpu_mark_single_thread_rating, passmark$class, sd)
+max(sds)/min(sds)
+
+# Looks good, one way ANOVA
+aov2 <- aov(passmark$cpu_mark_single_thread_rating ~ passmark$class)
+summary(aov2)
+```
+
+The results of the ANOVA test suggest that the groups are indeed different, so a Tukey test should be performed to find which groups are different from which.
+
+```{r}
+TukeyHSD(aov2)
+par(mar=c(5, 8, 4, 1))
+plot(TukeyHSD(aov2), las = 1)
+```
+
+Interestingly, for mean single-threaded PassMark scores, all CPU classes differ from each other, including Mobile with Laptop, except Server with Desktop. The lack of difference for single-threaded performance as opposed to multi-threaded performance does make sense though as server CPUs are designed for scalability and parallelized processes. However, this difference in results for mobile and laptop CPUs between multi- and single-threaded performances is a new question worthy of some research.
+
+
+#### Intel vs. AMD
+
+Intel vs. AMD has long been a debate in the tech community. Although Intel had long dominated the CPU market, AMD has increasingly demonstrated in recent years to be a strong competitor and arguably its performance edge over Intel. Consequently, we would like to see if benchmark scores reflect this competitiveness from two angles: overall mean scores and mean scores within the top CPUs of each brand.
+
+We will be using the `combined_filtered` dataframe, which has PassMark and UserBenchmark data for just laptop and desktop processors, as these are almost always the only processor classes that matter to the typical consumer. This dataframe will be filtered for AMD and Intel CPUs only.
+
+First let's look at overall mean scores, starting with PassMark.
+
+```{r}
+intel_amd <- combined_filtered[combined_filtered$brand == "Intel" | 
+                                 combined_filtered$brand == "AMD", ]
+intel_amd$log_cpu_mark_rating <- log(intel_amd$cpu_mark_rating)
+
+boxplot(intel_amd$log_cpu_mark_rating ~ intel_amd$brand)
+```
+
+Just from the boxplot, there doesn't seem to be any significant difference, and a t-test confirms this.
+
+```{r}
+t.test(log_cpu_mark_rating ~ brand, data = intel_amd)
+```
+
+
+However, this considers all CPUs for each brand, which isn't really helpful in determining what the better brand is since both brands release low-end CPUs every year for products that don't require any heavy lifting that target a more general-everyday-use audience. As a result, it may be more interesting to consider only the top 30 best performing CPUs for each brand.
+
+```{r}
+# Get top 30 for each brand
+top30_intel <- slice_max(intel_amd[intel_amd$brand == "Intel", ], 
+                         order_by = cpu_mark_rating, n = 30)
+top30_amd <- slice_max(intel_amd[intel_amd$brand == "AMD", ], 
+                       order_by = cpu_mark_rating, n = 30)
+
+top30s <- rbind(top30_intel, top30_amd)
+```
+
+```{r}
+boxplot(top30s$log_cpu_mark_rating ~ top30s$brand)
+```
+
+As mentioned earlier, we hypothesize that AMD has a performance edge over Intel, so our null hypothesis is that the mean log PassMark score for AMD CPUs is equal to that for Intel and the alternative is that the mean score for AMD is greater than that for Intel.
+
+```{r}
+t.test(log_cpu_mark_rating ~ brand, data = top30s, alternative = "greater")
+```
+
+It's clear from the very small p-value that the mean log PassMark overall score for the top 30 AMD CPUs is indeed greater than that for the top 30 Intel CPUs in a statistically significant way.
+
+
+Now let's see if these results are reflected in UserBenchmark data.
+
+```{r}
+boxplot(intel_amd$userbenchmark_score ~ intel_amd$brand)
+t.test(userbenchmark_score ~ brand, data = intel_amd)
+```
+
+Interestingly for UserBenchmark, we find that the mean scores for all Intel and AMD CPUs are statistically significant, specifically in favor of Intel.
+
+We next check the top 30 CPUs of each brand.
+
+```{r}
+top30_intel <- slice_max(intel_amd[intel_amd$brand == "Intel", ], 
+                         order_by = userbenchmark_score, n = 30)
+top30_amd <- slice_max(intel_amd[intel_amd$brand == "AMD", ], 
+                       order_by = userbenchmark_score, n = 30)
+top30s <- rbind(top30_intel, top30_amd)
+
+boxplot(top30s$userbenchmark_score ~ top30s$brand)
+t.test(userbenchmark_score ~ brand, data = top30s, alternative = "less")
+```
+
+Again, the mean UserBenchmark score for the top 30 Intel CPUs is greater than that for the top 30 AMD CPUs, which is the complete opposite conclusion made for (log) PassMark scores.
+
+
+What is the source of this discrepancy?
+
+
+#### Is UserBenchmark Biased?
+
+Speculation surrounding UserBenchmark being biased in favor of Intel CPUs has been well-documented across the Internet, from YouTube videos to tech forums. A rather promising argument for why this bias is present that I found on Reddit was that efps results, as seen in `userbenchmark_efps`, have a large impact on the overall score and heavily weigh 0.1% lows in frame rates. Intel definitely has an advantage here as seen below:
+
+```{r}
+boxplot(intel_amd$userbenchmark_efps ~ intel_amd$brand)
+```
+
+However, when it comes to a practical experience, 0.1% lows, while important in the smoothness of playing games, aren't relevant to the point of completely swaying the overall score. Moreover, there are plenty of other reasons for the "Intel bias" and fishy occurrences well-documented on the Internet, such as [this article](https://ownsnap.com/userbenchmark-biased/). 
+
+We have come up with our own statistical method for determining if UserBenchmark is biased in favor of Intel. It does however rely on one important assumption that PassMark is an unbiased source. PassMark has its flaws, but there really isn't any one perfect benchmark platform; more importantly, PassMark has for the most part consistently reflected the analyses and comparisons made by leading tech reviewers in the community as well as numbers published by AMD and Intel themselves.
+
+The idea is that there should be a linear relationship mapping PassMark scores to UserBenchmark scores. The rationale for this is is that a CPU that performs very poorly or very well on PassMark should perform roughly equally as poorly or well on UserBenchmark and everything in between. With PassMark acting as an unbiased reference, the regression line for each of Intel and AMD would pretty much be identical if UserBenchmark was unbiased. However, if there is a statistically significant difference in the slopes (in other words they are not parallel), that would indicate that UserBenchmark is not fairly reflecting relative performance.
+
+```{r}
+plot(intel_amd$userbenchmark_score ~ intel_amd$log_cpu_mark_rating, 
+     col = factor(intel_amd$brand), pch = 20, cex = 1.2)
+legend("topleft", col = 1:2, legend = levels(factor(intel_amd$brand)), pch = 20)
+```
+There does appear to be some curvature in the scatterplot, we can try transforming `userbenchmark_score`.
+
+```{r}
+trans <- boxCox(lm(userbenchmark_score ~ brand, data = intel_amd))
+trans$x[which.max(trans$y)]
+```
+
+The value of lambda is roughly 0.38, which means a reasonable transformation is a cube root.
+
+```{r}
+# Apply transformation and re plot
+intel_amd$trans_userbenchmark_score <- (intel_amd$userbenchmark_score) ^ (1/3)
+
+plot(intel_amd$trans_userbenchmark_score ~ intel_amd$log_cpu_mark_rating, 
+     col = factor(intel_amd$brand), pch = 20, cex = 1.2)
+legend("topleft", col = 1:2, legend = levels(factor(intel_amd$brand)), pch = 20)
+```
+
+We now perform an ANCOVA with `brand` as the categorical variable for which we will be examining its interaction with `log_cpu_mark_rating`.
+
+```{r}
+m1 <- lm(trans_userbenchmark_score ~ log_cpu_mark_rating*brand, 
+         data = intel_amd)
+Anova(m1, type = 3)
+summary(m1)
+```
+
+As one can see from the summary information, the coefficient `log_cpu_mark_rating:brandIntel` is statistically significant and positive which indicates that Intel CPUs with a given PassMark score tend to have higher corresponding UserBenchmark scores than AMD CPUs with the same PassMark score. In other words, the slope of the regression line for AMD is `log_cpu_mark_rating` while for Intel it is (`log_cpu_mark_rating` +  `log_cpu_mark_rating:brandIntel`).
+
+To visualize this difference in slopes, we overlay the scatterplot with both regression lines.
+
+```{r}
+# Get coefficients of model
+coefs <- coef(m1)
+round(coefs, 4)
+
+# Plot with regression lines
+plot(intel_amd$trans_userbenchmark_score ~ intel_amd$log_cpu_mark_rating, 
+     col = factor(intel_amd$brand), pch = 20, cex = 1.2, 
+     xlab = "PassMark Score (Log Transformed)", 
+     ylab = "UserBenchmark Score (Cube Root Transformed)")
+legend("topleft", col = 1:2, legend = levels(factor(intel_amd$brand)), pch = 20)
+
+abline(a = coefs[1], b = coefs[2], col = 1, lwd = 3)
+abline(a = coefs[1] + coefs[3], b = coefs[2] + coefs[4], col = 2, lwd = 3)
+```
+
+Therefore, we can conclude there is evidence that UserBenchmark is biased in favor of Intel.
+
+
+## Conclusion
+
+UserBenchmark bad lol

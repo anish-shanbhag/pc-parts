@@ -1,4 +1,4 @@
-# pc-parts
+# CPU Performance Data Analysis
 
 In this project, we perform basic exploratory analysis on data that has been scraped from PassMark and UserBenchmark for CPUs released within the last few decades, which contains information on make and performance for those processors.
 
